@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "294700607821",
+    "project_id": "founderfinder-aeaca",
+    "storage_bucket": "founderfinder-aeaca.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:294700607821:android:297a8218c78331e4adaf04",
+        "android_client_info": {
+          "package_name": "com.phoenixCorp.founderFinder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBeDs95oI7G6fXilozZpRzUXG_cvU5oO-w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:294700607821:android:ecff054fda70fcb3adaf04",
+        "android_client_info": {
+          "package_name": "com.phoenixcorp.founderfinder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBeDs95oI7G6fXilozZpRzUXG_cvU5oO-w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
