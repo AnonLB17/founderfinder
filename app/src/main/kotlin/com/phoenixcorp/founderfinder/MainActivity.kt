@@ -23,7 +23,6 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.messaging.FirebaseMessaging
 import com.phoenixcorp.founderfinder.navigation.AppNavGraph
 import com.phoenixcorp.founderfinder.ui.FounderfinderTheme
-import com.phoenixcorp.founderfinder.ui.screens.SplashScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,27 +61,15 @@ class MainActivity : ComponentActivity() {
         firebaseAppCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
         Log.d("MainActivity", "Using DebugAppCheckProviderFactory")
 
-        // Check if user is signed in
-        val currentUser = auth.currentUser
-        if (currentUser == null) {
-            Log.d("MainActivity", "No user signed in, redirecting to LoginScreen")
-            setContent {
-                FounderfinderTheme {
-                    SplashScreen(navController = rememberNavController())
-                }
+        setContent {
+            FounderfinderTheme {
+                snackbarHostState = remember { SnackbarHostState() }
+                navController = rememberNavController()
+                AppNavGraph(navController = navController, snackbarHostState = snackbarHostState)
             }
-        } else {
-            Log.d("MainActivity", "User signed in: ${currentUser.uid}")
-            setContent {
-                FounderfinderTheme {
-                    snackbarHostState = remember { SnackbarHostState() }
-                    navController = rememberNavController()
-                    AppNavGraph(navController = navController, snackbarHostState = snackbarHostState)
-                }
-            }
-            fetchFcmToken()
-            handleIntent(intent)
         }
+        fetchFcmToken()
+        handleIntent(intent)
     }
 
     override fun onStart() {
