@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">founderfinder</string>
+    <string name="default_notification_channel_id">founderfinder_channel</string>
 </resources>

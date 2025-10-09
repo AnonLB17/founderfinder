@@ -2,8 +2,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
-    id("org.jetbrains.kotlin.plugin.serialization") // Add this line
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.hilt.android)
 }
 
 android {
@@ -22,77 +23,84 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = false // Temporarily disabled to bypass R8 error
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
+    kotlinOptions {
+        jvmTarget = "17"
+    }
     buildFeatures {
         compose = true
     }
-}
-
-kotlin {
-    jvmToolchain(17) // or the version you are using
-    sourceSets.getByName("main").kotlin.srcDirs("src/main/kotlin")
-    sourceSets.getByName("test").kotlin.srcDirs("src/test/kotlin")
-    sourceSets.getByName("androidTest").kotlin.srcDirs("src/androidTest/kotlin")
+    sourceSets {
+        getByName("main") {
+            kotlin.srcDirs("src/main/kotlin")
+        }
+    }
+    lint {
+        baseline = file("lint-baseline.xml") // Optional: Remove after fixing API issue
+    }
+    packaging {
+        resources {
+            excludes.add("/META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+            excludes.add("/META-INF/{AL2.0,LGPL2.1}")
+        }
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
+    implementation(platform(libs.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.datastore.core.android)
+    implementation(libs.firebase.crashlytics.buildtools)
+    implementation(libs.volley)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.auth.ktx)
+    implementation(libs.firebase.firestore.ktx)
+    implementation(libs.firebase.storage.ktx)
+    implementation(libs.firebase.messaging)
+    implementation("com.google.firebase:firebase-appcheck-playintegrity:18.0.0")
+    implementation("com.google.firebase:firebase-appcheck-debug:18.0.0") // Added for App Check
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.livedata.ktx)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.coil.compose)
+    implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.hilt.android)
+    implementation(libs.identity.jvm)
+    annotationProcessor(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    implementation(platform("com.google.firebase:firebase-bom:33.8.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-storage-ktx")
-    implementation("androidx.core:core-ktx:1.10.1")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.9.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") // Use the latest version
-    implementation("androidx.navigation:navigation-compose:2.7.5")
-    implementation("androidx.compose.ui:ui:1.7.7") // Or the latest version
-    implementation("androidx.compose.material:material:1.7.7") // Or the latest version
-    implementation("androidx.compose.ui:ui-tooling-preview:1.7.7") // Or the latest version
-    implementation("androidx.compose.foundation:foundation:1.7.7")
-    implementation("io.coil-kt:coil-compose:2.2.2")
-    implementation("androidx.compose.material3:material3:1.2.0")
-    implementation("androidx.compose.material:material-icons-core:1.7.7") // Or the latest version
-    implementation("androidx.compose.material:material-icons-extended:1.7.7")
-    implementation("io.coil-kt:coil-compose:2.3.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
-    implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
-    implementation("io.coil-kt:coil-compose:2.4.0")
-    implementation("androidx.compose.material3:material3:1.2.0")
-    implementation("com.google.firebase:firebase-firestore-ktx:24.10.0")
-    implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
-    implementation("com.google.firebase:firebase-auth-ktx:22.3.0")
-    implementation("androidx.navigation:navigation-compose:2.7.0")
-// Add implementation("com.google.firebase:firebase-dataconnect:1.0.0") // Example, use the correct version
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.20") { because("Force version to match Kotlin plugin") }
+    implementation("androidx.compose.foundation:foundation:1.6.0")
 }

@@ -1,21 +1,35 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+#Preserve Google Play licensing service
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+-keep public class com.google.android.vending.licensing.ILicensingService
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+Preserve annotations
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+-keep class android.support.annotation.Keep -keep @interface androidx.annotation.Keep { *; } -keep @androidx.annotation.Keep class * { *; } -keep @interface com.google.android.gms.common.annotation.KeepName { *; } -keep @com.google.android.gms.common.annotation.KeepName class * { *; } -keep @interface com.google.android.gms.common.util.DynamiteApi { *; }
+
+#Keep Navigation classes
+
+-keep,allowobfuscation,allowshrinking class * extends androidx.navigation.Navigator { *; }
+
+#Keep Hilt entry points
+
+-keep,allowobfuscation,allowshrinking @dagger.hilt.EntryPoint class * { *; } -keep,allowobfuscation,allowshrinking @dagger.hilt.android.EarlyEntryPoint class * { *; } -keep,allowobfuscation,allowshrinking @dagger.hilt.internal.ComponentEntryPoint class * { *; } -keep,allowobfuscation,allowshrinking @dagger.hilt.internal.GeneratedEntryPoint class * { *; }
+
+#Keep Firebase components
+
+-keep class * implements com.google.firebase.components.ComponentRegistrar { ; } -keep,allowshrinking interface com.google.firebase.components.ComponentRegistrar { ; } -dontwarn com.google.firebase.
+
+Keep Coil classes
+
+-keep class coil.** { ; } -dontwarn coil.*
+
+Keep Compose classes
+
+-keep,allowshrinking class * extends androidx.compose.ui.node.ModifierNodeElement { *; }
+
+#Keep other classes
+
+-keep class com.google.android.gms.common.internal.ReflectedParcelable { *; } -keep,allowshrinking class * implements com.google.android.gms.common.internal.ReflectedParcelable { *; } -keep,allowshrinking class * implements androidx.versionedparcelable.VersionedParcelable { *; } -keep public class androidx.versionedparcelable.ParcelImpl { *; } -keep,allowshrinking class * extends androidx.startup.Initializer { *; }
+
+#Kotlin serialization
+
+-keepattributes Annotation, InnerClasses -dontnote kotlinx.serialization.SerializationStrategy -dontnote kotlinx.serialization.DeserializationStrategy
