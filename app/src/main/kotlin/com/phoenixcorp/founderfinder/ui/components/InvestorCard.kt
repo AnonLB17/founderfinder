@@ -28,7 +28,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.Investor
+import com.phoenixcorp.founderfinder.domain.model.Investor
 import com.phoenixcorp.founderfinder.navigation.Screen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await

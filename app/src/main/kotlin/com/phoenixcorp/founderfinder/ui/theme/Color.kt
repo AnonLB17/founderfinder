@@ -1,4 +1,4 @@
-package com.phoenixcorp.founderfinder.ui
+package com.phoenixcorp.founderfinder.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

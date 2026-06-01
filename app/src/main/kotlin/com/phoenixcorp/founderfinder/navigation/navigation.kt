@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.phoenixcorp.founderfinder.ui.FounderfinderTheme
+import com.phoenixcorp.founderfinder.ui.theme.FounderfinderTheme
 import com.phoenixcorp.founderfinder.ui.screens.AdvisorSearchFeatureScreen
 import com.phoenixcorp.founderfinder.ui.screens.AdvisorSignUpScreen
 import com.phoenixcorp.founderfinder.ui.screens.AmbitionStatementScreen

@@ -20,7 +20,7 @@ import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.Investor
+import com.phoenixcorp.founderfinder.domain.model.Investor
 import com.phoenixcorp.founderfinder.data.RoleProfile
 import com.phoenixcorp.founderfinder.data.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen

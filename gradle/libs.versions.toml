@@ -1,5 +1,5 @@
 [versions]
-android-gradle-plugin = "8.10.1"
+android-gradle-plugin = "8.13.2"
 kotlin = "2.0.20"
 compose-bom = "2024.10.00"
 androidx-core-ktx = "1.13.1"
@@ -25,6 +25,7 @@ androidx-ui-tooling = "1.7.4"
 firebase-crashlytics-buildtools = "3.0.2"
 volley = "1.2.1"
 identity-jvm = "202411.1"
+firebase-appcheck-debug = "19.1.0"
 
 [libraries]
 android-gradle-plugin = { group = "com.android.tools.build", name = "gradle", version.ref = "android-gradle-plugin" }
@@ -68,6 +69,7 @@ androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-man
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebase-crashlytics-buildtools" }
 volley = { group = "com.android.volley", name = "volley", version.ref = "volley" }
 identity-jvm = { group = "com.android.identity", name = "identity-jvm", version.ref = "identity-jvm" }
+firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appcheck-debug", version.ref = "firebase-appcheck-debug" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
@@ -76,3 +78,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 google-services = { id = "com.google.gms.google-services", version = "4.4.2" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt-android" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }

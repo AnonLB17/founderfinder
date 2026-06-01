@@ -1,7 +1,7 @@
 package com.phoenixcorp.founderfinder.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
-import com.phoenixcorp.founderfinder.data.UserRepository
+import com.phoenixcorp.founderfinder.domain.repository.UserRepository
 
 class AuthViewModel : ViewModel() {
     private val repository = UserRepository()
