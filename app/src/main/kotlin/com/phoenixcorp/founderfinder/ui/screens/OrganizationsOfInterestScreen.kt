@@ -9,26 +9,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
 fun OrganizationsOfInterestScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
 ) {
     var keyword by remember { mutableStateOf("") }
     var organizations by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
-    val currentUser = Firebase.auth.currentUser
+    // Use ViewModel instead of direct Firebase call
+    val currentUser = authViewModel.getCurrentUser()
     val userId = currentUser?.uid
 
     Column(
@@ -37,15 +37,20 @@ fun OrganizationsOfInterestScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Organizations of Interest", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Organizations of Interest",
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = keyword,
             onValueChange = { keyword = it },
             label = { Text("Search Organization") },
+            placeholder = { Text("e.g. Y Combinator, a16z, Google") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -73,15 +78,20 @@ fun OrganizationsOfInterestScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (organizations.isNotEmpty()) {
+            Text("Selected Organizations:", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             organizations.forEach { org ->
-                Text(text = org, style = MaterialTheme.typography.bodyMedium)
+                Text(text = "• $org", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
             }
         } else {
-            Text(text = "No organizations added yet.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "No organizations added yet.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
@@ -124,7 +134,7 @@ fun OrganizationsOfInterestScreen(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Text("Submit")
+                Text("Next")
             }
         }
     }

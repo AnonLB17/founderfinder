@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.firebase.appcheck.debug)
 
     implementation(libs.hilt.android)
+    implementation(libs.firebase.crashlytics.buildtools)
     ksp(libs.hilt.compiler)
 
     implementation(libs.androidx.appcompat)

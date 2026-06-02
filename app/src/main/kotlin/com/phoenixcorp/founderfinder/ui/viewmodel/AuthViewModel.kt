@@ -3,9 +3,8 @@ package com.phoenixcorp.founderfinder.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,13 +14,12 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val firestore: FirebaseFirestore
 ) : ViewModel() {
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Initial)
     val authState = _authState.asStateFlow()
-
-    private val firestore = Firebase.firestore
 
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
@@ -60,6 +58,8 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun getCurrentUser() = auth.currentUser
+
     /**
      * Saves basic user information (First Name, Last Name, Birth Date)
      */
@@ -84,7 +84,6 @@ class AuthViewModel @Inject constructor(
                     .set(userData, com.google.firebase.firestore.SetOptions.merge())
                     .await()
 
-                // Also update the "users" collection for consistency
                 firestore.collection("users")
                     .document(userId)
                     .set(userData, com.google.firebase.firestore.SetOptions.merge())

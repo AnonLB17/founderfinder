@@ -9,18 +9,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
 fun EducationScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
 ) {
     var highestEducation by remember { mutableStateOf("") }
     var institution by remember { mutableStateOf("") }
@@ -28,9 +26,11 @@ fun EducationScreen(
     var educationEntries by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
-    val currentUser = Firebase.auth.currentUser
+    // Get user from ViewModel instead of direct Firebase call
+    val currentUser = authViewModel.getCurrentUser()
     val userId = currentUser?.uid
 
     Column(
@@ -40,15 +40,19 @@ fun EducationScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Education", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Education",
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = highestEducation,
             onValueChange = { highestEducation = it },
             label = { Text("Highest Level of Education") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -57,7 +61,8 @@ fun EducationScreen(
             onValueChange = { areaOfStudy = it },
             label = { Text("Area of Study / Major") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -66,7 +71,8 @@ fun EducationScreen(
             onValueChange = { institution = it },
             label = { Text("Institution Name") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -76,7 +82,8 @@ fun EducationScreen(
                     errorMessage = "Please fill in all education fields."
                     return@Button
                 }
-                educationEntries = educationEntries + "$highestEducation in $areaOfStudy from $institution"
+                val entry = "$highestEducation in $areaOfStudy from $institution"
+                educationEntries = educationEntries + entry
                 highestEducation = ""
                 areaOfStudy = ""
                 institution = ""
@@ -91,12 +98,17 @@ fun EducationScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (educationEntries.isNotEmpty()) {
+            Text("Added Education Entries:", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             educationEntries.forEach { entry ->
-                Text(text = entry, style = MaterialTheme.typography.bodyMedium)
+                Text(text = "• $entry", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
             }
         } else {
-            Text(text = "No education entries added yet.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "No education entries added yet.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

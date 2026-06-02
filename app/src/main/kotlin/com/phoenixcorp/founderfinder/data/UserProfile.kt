@@ -44,3 +44,42 @@ data class UserProfile(
     val experienceYears: Int? = null,
     val partner: Boolean? = null
 )
+
+// ====================== MAPPINGS ======================
+
+/**
+ * Convert UserProfile to domain.model.User
+ */
+fun UserProfile.toUser(): com.phoenixcorp.founderfinder.domain.model.User {
+    val fullName = listOfNotNull(firstName, lastName)
+        .joinToString(" ")
+        .ifBlank { "Unknown User" }
+
+    return com.phoenixcorp.founderfinder.domain.model.User(
+        uid = this.userId ?: "",
+        name = fullName,
+        email = this.email,
+        school = null,                    // Not stored in UserProfile yet
+        bio = this.bio,
+        profileImageUrl = this.profilePicture,
+        role = com.phoenixcorp.founderfinder.domain.model.UserRole.FOUNDER, // Default - adjust as needed
+        interests = this.industries ?: emptyList(),
+        isVerified = false
+    )
+}
+
+/**
+ * Convert domain User back to UserProfile
+ */
+fun com.phoenixcorp.founderfinder.domain.model.User.toUserProfile(): UserProfile {
+    val nameParts = this.name.split(" ")
+    return UserProfile(
+        userId = this.uid,
+        firstName = nameParts.firstOrNull(),
+        lastName = if (nameParts.size > 1) nameParts.drop(1).joinToString(" ") else null,
+        email = this.email,
+        bio = this.bio,
+        profilePicture = this.profileImageUrl,
+        industries = this.interests
+    )
+}

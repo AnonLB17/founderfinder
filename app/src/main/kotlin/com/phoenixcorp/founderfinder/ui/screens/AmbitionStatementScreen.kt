@@ -9,25 +9,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
 fun AmbitionStatementScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
 ) {
     var ambitionStatement by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
-    val currentUser = Firebase.auth.currentUser
+    // Use ViewModel instead of direct Firebase call
+    val currentUser = authViewModel.getCurrentUser()
     val userId = currentUser?.uid
 
     Column(
@@ -41,19 +41,20 @@ fun AmbitionStatementScreen(
             text = "Ambition Statement",
             style = MaterialTheme.typography.headlineLarge
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = ambitionStatement,
             onValueChange = { ambitionStatement = it },
             label = { Text("Write about your ambition and goals") },
+            placeholder = { Text("I want to build a platform that connects founders with advisors...") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
-            maxLines = 6,
-            minLines = 4
+            maxLines = 8,
+            minLines = 5
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         errorMessage?.let {
             Text(

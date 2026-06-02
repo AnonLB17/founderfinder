@@ -10,11 +10,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
@@ -24,11 +24,8 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun FounderStatusScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val firestore = Firebase.firestore
-    val coroutineScope = rememberCoroutineScope()
-
     var founderStatus by remember { mutableStateOf(false) }
     var startupName by remember { mutableStateOf("") }
     var startupStage by remember { mutableStateOf("") }
@@ -37,14 +34,18 @@ fun FounderStatusScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
-    val currentUser = Firebase.auth.currentUser
+    val coroutineScope = rememberCoroutineScope()
+
+    val currentUser = authViewModel.getCurrentUser()
     val userId = currentUser?.uid
 
     // Fetch existing founder status
     LaunchedEffect(userId) {
         if (userId == null) return@LaunchedEffect
+
         coroutineScope.launch {
             try {
+                val firestore: FirebaseFirestore = Firebase.firestore
                 val document = firestore.collection("users")
                     .document(userId)
                     .get()
@@ -67,10 +68,15 @@ fun FounderStatusScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Founder Status", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Founder Status",
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(text = "Are you currently a founder?")
+        Spacer(modifier = Modifier.height(8.dp))
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
@@ -84,7 +90,7 @@ fun FounderStatusScreen(
                 )
                 Text("Yes")
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(24.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = !founderStatus,
@@ -94,6 +100,7 @@ fun FounderStatusScreen(
                 Text("No")
             }
         }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         if (founderStatus) {
@@ -102,16 +109,18 @@ fun FounderStatusScreen(
                 onValueChange = { startupName = it },
                 label = { Text("Startup Name") },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !isLoading,
+                singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
                 value = startupStage,
                 onValueChange = { startupStage = it },
-                label = { Text("Startup Stage") },
+                label = { Text("Startup Stage (e.g. Pre-seed, Seed, Series A)") },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !isLoading,
+                singleLine = true
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -121,6 +130,7 @@ fun FounderStatusScreen(
                         founderEntries = founderEntries + "$startupName - $startupStage"
                         startupName = ""
                         startupStage = ""
+                        errorMessage = null
                     } else {
                         errorMessage = "Please fill in both startup name and stage."
                     }
@@ -128,24 +138,29 @@ fun FounderStatusScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading
             ) {
-                Text("+ Add")
+                Text("+ Add Startup")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             if (founderEntries.isNotEmpty()) {
+                Text("Added Founder Entries:", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
                 founderEntries.forEach { entry ->
-                    Text(text = entry, style = MaterialTheme.typography.bodyMedium)
+                    Text(text = "• $entry", style = MaterialTheme.typography.bodyMedium)
                     Spacer(modifier = Modifier.height(4.dp))
                 }
             } else {
                 Text(text = "No founder entries added yet.", style = MaterialTheme.typography.bodySmall)
             }
         } else {
-            Text(text = "No founder details required.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "No founder details required.",
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)

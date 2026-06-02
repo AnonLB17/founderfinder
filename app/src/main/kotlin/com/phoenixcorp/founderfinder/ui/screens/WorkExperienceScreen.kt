@@ -11,18 +11,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
 fun WorkExperienceScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
 ) {
     var jobTitle by remember { mutableStateOf("") }
     var company by remember { mutableStateOf("") }
@@ -30,9 +28,11 @@ fun WorkExperienceScreen(
     var workExperiences by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
-    val currentUser = Firebase.auth.currentUser
+    // Use ViewModel instead of direct Firebase call
+    val currentUser = authViewModel.getCurrentUser()
     val userId = currentUser?.uid
 
     Column(
@@ -42,15 +42,19 @@ fun WorkExperienceScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Work Experience", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Work Experience",
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = jobTitle,
             onValueChange = { jobTitle = it },
             label = { Text("Job Title") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -59,7 +63,8 @@ fun WorkExperienceScreen(
             onValueChange = { company = it },
             label = { Text("Company Name") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -69,7 +74,8 @@ fun WorkExperienceScreen(
             label = { Text("Years of Experience") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -85,7 +91,9 @@ fun WorkExperienceScreen(
                     return@Button
                 }
 
-                workExperiences = workExperiences + "$jobTitle at $company ($years years)"
+                val entry = "$jobTitle at $company ($years years)"
+                workExperiences = workExperiences + entry
+
                 jobTitle = ""
                 company = ""
                 yearsOfExperience = ""
@@ -100,12 +108,17 @@ fun WorkExperienceScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (workExperiences.isNotEmpty()) {
+            Text("Added Work Experiences:", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             workExperiences.forEach { experience ->
-                Text(text = experience, style = MaterialTheme.typography.bodyMedium)
+                Text(text = "• $experience", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
             }
         } else {
-            Text(text = "No work experiences added yet.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "No work experiences added yet.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

@@ -9,18 +9,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
 fun ConnectSocialsScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
 ) {
     var linkedin by remember { mutableStateOf("") }
     var twitter by remember { mutableStateOf("") }
@@ -29,9 +27,11 @@ fun ConnectSocialsScreen(
     var website by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
-    val currentUser = Firebase.auth.currentUser
+    // Use ViewModel instead of direct Firebase call
+    val currentUser = authViewModel.getCurrentUser()
     val userId = currentUser?.uid
 
     Column(
@@ -41,15 +41,20 @@ fun ConnectSocialsScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Connect Socials", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Connect Socials",
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = linkedin,
             onValueChange = { linkedin = it },
             label = { Text("LinkedIn Profile URL") },
+            placeholder = { Text("https://linkedin.com/in/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -57,8 +62,10 @@ fun ConnectSocialsScreen(
             value = twitter,
             onValueChange = { twitter = it },
             label = { Text("Twitter / X Profile URL") },
+            placeholder = { Text("https://twitter.com/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -66,8 +73,10 @@ fun ConnectSocialsScreen(
             value = facebook,
             onValueChange = { facebook = it },
             label = { Text("Facebook Profile URL") },
+            placeholder = { Text("https://facebook.com/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -75,8 +84,10 @@ fun ConnectSocialsScreen(
             value = instagram,
             onValueChange = { instagram = it },
             label = { Text("Instagram Profile URL") },
+            placeholder = { Text("https://instagram.com/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -84,14 +95,19 @@ fun ConnectSocialsScreen(
             value = website,
             onValueChange = { website = it },
             label = { Text("Personal Website or Portfolio") },
+            placeholder = { Text("https://yourwebsite.com") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            singleLine = true
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         errorMessage?.let {
-            Text(text = it, color = MaterialTheme.colorScheme.error)
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error
+            )
             Spacer(modifier = Modifier.height(8.dp))
         }
 
