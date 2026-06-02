@@ -12,7 +12,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
@@ -21,7 +21,7 @@ import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 @Composable
 fun SignUpScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // ← CHANGED HERE
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }

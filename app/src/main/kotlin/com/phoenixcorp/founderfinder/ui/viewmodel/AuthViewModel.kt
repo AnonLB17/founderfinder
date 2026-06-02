@@ -35,10 +35,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun signUp(email: String, password: String) {
-        // Similar implementation...
-    }
-
     fun registerUser(
         email: String,
         password: String,
@@ -48,7 +44,6 @@ class AuthViewModel @Inject constructor(
             try {
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 if (result.user != null) {
-                    // Optionally create initial profile document
                     firestore.collection("profiles")
                         .document(result.user!!.uid)
                         .set(mapOf("userId" to result.user!!.uid, "email" to email))
