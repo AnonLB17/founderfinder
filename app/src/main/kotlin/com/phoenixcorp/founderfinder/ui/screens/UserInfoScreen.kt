@@ -2,31 +2,35 @@ package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun UserInfoScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun UserInfoScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var birthDate by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -65,7 +69,6 @@ fun UserInfoScreen(navController: NavHostController, authViewModel: AuthViewMode
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -82,7 +85,7 @@ fun UserInfoScreen(navController: NavHostController, authViewModel: AuthViewMode
                     errorMessage = "Please fill in all fields."
                     return@Button
                 }
-                // Basic birth date format validation (MM/DD/YYYY)
+                // Basic birth date format validation
                 val birthDatePattern = Regex("^\\d{2}/\\d{2}/\\d{4}$")
                 if (!birthDate.matches(birthDatePattern)) {
                     errorMessage = "Birth date must be in MM/DD/YYYY format."
@@ -91,6 +94,7 @@ fun UserInfoScreen(navController: NavHostController, authViewModel: AuthViewMode
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.saveUserInfo(userId, firstName, lastName, birthDate) { success ->
                     isLoading = false
                     if (success) {

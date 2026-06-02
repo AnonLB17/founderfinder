@@ -1,6 +1,7 @@
-package com.phoenixcorp.founderfinder.ui.screens
+package com.phoenixcorp.founderfinder.ui.components
 
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,9 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.data.RoleProfile
 import com.phoenixcorp.founderfinder.data.UserProfile
@@ -29,7 +30,7 @@ import kotlinx.coroutines.tasks.await
 
 @Composable
 fun AdvisorCard(profile: UserProfile, navController: NavHostController) {
-    val auth = FirebaseAuth.getInstance()
+    val auth = Firebase.auth
     val firestore = Firebase.firestore
     val coroutineScope = rememberCoroutineScope()
     var advisorProfile by remember { mutableStateOf<RoleProfile?>(null) }
@@ -47,17 +48,20 @@ fun AdvisorCard(profile: UserProfile, navController: NavHostController) {
                     .document("data")
                     .get()
                     .await()
+
                 if (advisorDoc.exists()) {
                     advisorProfile = advisorDoc.toObject(RoleProfile::class.java)
                     Log.d("AdvisorCard", "Fetched advisor profile: expertise=${advisorProfile?.expertise}, experienceYears=${advisorProfile?.experienceYears}")
                 } else {
                     Log.w("AdvisorCard", "No advisor profile found for user ${profile.userId}")
                 }
-                isLoading = false
             } catch (e: Exception) {
                 Log.e("AdvisorCard", "Error fetching advisor profile: ${e.message}", e)
+            } finally {
                 isLoading = false
             }
+        } else {
+            isLoading = false
         }
     }
 
@@ -76,23 +80,14 @@ fun AdvisorCard(profile: UserProfile, navController: NavHostController) {
                             if (profileDoc.exists()) {
                                 navController.navigate(Screen.UserProfile.createRoute(userId))
                             } else {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "User profile not found",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                                Log.e("AdvisorCard", "Profile not found for userId: $userId")
+                                Toast.makeText(context, "User profile not found", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Error checking profile: ${e.message}",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                            Log.e("AdvisorCard", "Error checking profile: ${e.message}", e)
+                            Toast.makeText(context, "Error checking profile: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Log.e("AdvisorCard", "Error checking profile", e)
                         }
                     }
-                } ?: Log.e("AdvisorCard", "UserId is null")
+                }
             }
     ) {
         Row(
@@ -102,10 +97,10 @@ fun AdvisorCard(profile: UserProfile, navController: NavHostController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Profile Picture
-            if (profile.profilePicture != null && profile.profilePicture.isNotEmpty()) {
+            if (!profile.profilePicture.isNullOrEmpty()) {
                 Image(
                     painter = rememberAsyncImagePainter(
-                        model = ImageRequest.Builder(LocalContext.current)
+                        model = ImageRequest.Builder(context)
                             .data(profile.profilePicture)
                             .crossfade(true)
                             .placeholder(R.drawable.ic_profile_placeholder)
@@ -132,75 +127,59 @@ fun AdvisorCard(profile: UserProfile, navController: NavHostController) {
             Spacer(modifier = Modifier.width(16.dp))
 
             // Profile Details
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "${profile.firstName ?: "Unknown"} ${profile.lastName ?: "User"}",
                     style = MaterialTheme.typography.titleMedium
                 )
+
                 if (isLoading) {
-                    Text(
-                        text = "Loading...",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text(text = "Loading...", style = MaterialTheme.typography.bodyMedium)
                 } else {
                     advisorProfile?.expertise?.let { expertise ->
-                        Text(
-                            text = "Expertise: $expertise",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text(text = "Expertise: $expertise", style = MaterialTheme.typography.bodyMedium)
                     }
                     advisorProfile?.experienceYears?.let { years ->
-                        Text(
-                            text = "Experience: $years years",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text(text = "Experience: $years years", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
 
-            // Mail Icon
+            // Message Button
             IconButton(onClick = {
                 val currentUser = auth.currentUser
                 if (currentUser == null) {
-                    Log.e("AdvisorCard", "No authenticated user found, navigating to SignIn")
                     navController.navigate(Screen.SignIn.route)
-                } else {
-                    profile.userId?.let { recipientId ->
-                        coroutineScope.launch {
-                            try {
-                                Log.d("AdvisorCard", "Creating conversation for user ${currentUser.uid} with recipient $recipientId")
-                                // Generate sorted conversation ID
-                                val conversationId = if (currentUser.uid < recipientId) {
-                                    "${currentUser.uid}_$recipientId"
-                                } else {
-                                    "${recipientId}_${currentUser.uid}"
-                                }
-                                // Create conversation document
-                                val conversationData = hashMapOf(
-                                    "senderId" to currentUser.uid,
-                                    "recipientId" to recipientId,
-                                    "participantIds" to listOf(currentUser.uid, recipientId),
-                                    "lastUpdated" to System.currentTimeMillis()
-                                )
-                                firestore.collection("conversations")
-                                    .document(conversationId)
-                                    .set(conversationData, com.google.firebase.firestore.SetOptions.merge())
-                                    .await()
-                                Log.d("AdvisorCard", "Conversation created: $conversationId")
-                                // Navigate to PrivateChatScreen
-                                navController.navigate(Screen.PrivateChat.createRoute(conversationId))
-                            } catch (e: Exception) {
-                                Log.e("AdvisorCard", "Error creating conversation: ${e.message}", e)
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Failed to start conversation: ${e.message}",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
+                    return@IconButton
+                }
+
+                profile.userId?.let { recipientId ->
+                    coroutineScope.launch {
+                        try {
+                            val conversationId = if (currentUser.uid < recipientId) {
+                                "${currentUser.uid}_$recipientId"
+                            } else {
+                                "${recipientId}_${currentUser.uid}"
                             }
+
+                            val conversationData = hashMapOf(
+                                "senderId" to currentUser.uid,
+                                "recipientId" to recipientId,
+                                "participantIds" to listOf(currentUser.uid, recipientId),
+                                "lastUpdated" to System.currentTimeMillis()
+                            )
+
+                            firestore.collection("conversations")
+                                .document(conversationId)
+                                .set(conversationData, com.google.firebase.firestore.SetOptions.merge())
+                                .await()
+
+                            navController.navigate(Screen.PrivateChat.createRoute(conversationId))
+                        } catch (e: Exception) {
+                            Log.e("AdvisorCard", "Error creating conversation", e)
+                            Toast.makeText(context, "Failed to start chat", Toast.LENGTH_SHORT).show()
                         }
-                    } ?: Log.e("AdvisorCard", "Recipient userId is null")
+                    }
                 }
             }) {
                 Icon(

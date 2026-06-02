@@ -12,18 +12,24 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun OrganizationsOfInterestScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun OrganizationsOfInterestScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var keyword by remember { mutableStateOf("") }
     var organizations by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -49,11 +55,12 @@ fun OrganizationsOfInterestScreen(navController: NavHostController, authViewMode
                     errorMessage = "Please enter an organization."
                     return@Button
                 }
-                if (organizations.contains(keyword.trim())) {
+                val trimmed = keyword.trim()
+                if (organizations.contains(trimmed)) {
                     errorMessage = "This organization is already added."
                     return@Button
                 }
-                organizations = organizations + keyword.trim()
+                organizations = organizations + trimmed
                 keyword = ""
                 errorMessage = null
             },
@@ -64,9 +71,10 @@ fun OrganizationsOfInterestScreen(navController: NavHostController, authViewMode
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
         if (organizations.isNotEmpty()) {
-            organizations.forEach { organization ->
-                Text(text = organization, style = MaterialTheme.typography.bodyMedium)
+            organizations.forEach { org ->
+                Text(text = org, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
             }
         } else {
@@ -75,7 +83,6 @@ fun OrganizationsOfInterestScreen(navController: NavHostController, authViewMode
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -84,7 +91,7 @@ fun OrganizationsOfInterestScreen(navController: NavHostController, authViewMode
         Button(
             onClick = {
                 if (userId == null) {
-                    errorMessage = "You must be logged in to save your organizations."
+                    errorMessage = "You must be logged in."
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
@@ -95,6 +102,7 @@ fun OrganizationsOfInterestScreen(navController: NavHostController, authViewMode
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.saveOrganizationsOfInterest(userId, organizations) { success ->
                     isLoading = false
                     if (success) {

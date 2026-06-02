@@ -13,29 +13,35 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @Composable
-fun FounderStatusScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun FounderStatusScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     val firestore = Firebase.firestore
     val coroutineScope = rememberCoroutineScope()
+
     var founderStatus by remember { mutableStateOf(false) }
     var startupName by remember { mutableStateOf("") }
     var startupStage by remember { mutableStateOf("") }
     var founderEntries by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     // Fetch existing founder status
-    LaunchedEffect(Unit) {
+    LaunchedEffect(userId) {
         if (userId == null) return@LaunchedEffect
         coroutineScope.launch {
             try {
@@ -43,12 +49,13 @@ fun FounderStatusScreen(navController: NavHostController, authViewModel: AuthVie
                     .document(userId)
                     .get()
                     .await()
+
                 if (document.exists()) {
                     founderStatus = document.getBoolean("isFounder") ?: false
                     founderEntries = document.get("founderEntries") as? List<String> ?: emptyList()
                 }
             } catch (e: Exception) {
-                Log.e("FounderStatusScreen", "Error fetching founder status: ${e.message}", e)
+                Log.e("FounderStatusScreen", "Error fetching founder status", e)
             }
         }
     }
@@ -125,6 +132,7 @@ fun FounderStatusScreen(navController: NavHostController, authViewModel: AuthVie
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
             if (founderEntries.isNotEmpty()) {
                 founderEntries.forEach { entry ->
                     Text(text = entry, style = MaterialTheme.typography.bodyMedium)
@@ -134,15 +142,11 @@ fun FounderStatusScreen(navController: NavHostController, authViewModel: AuthVie
                 Text(text = "No founder entries added yet.", style = MaterialTheme.typography.bodySmall)
             }
         } else {
-            Text(
-                text = "No founder details required.",
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text(text = "No founder details required.", style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -151,7 +155,7 @@ fun FounderStatusScreen(navController: NavHostController, authViewModel: AuthVie
         Button(
             onClick = {
                 if (userId == null) {
-                    errorMessage = "You must be logged in to save your founder status."
+                    errorMessage = "You must be logged in."
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
@@ -162,25 +166,20 @@ fun FounderStatusScreen(navController: NavHostController, authViewModel: AuthVie
 
                 isLoading = true
                 errorMessage = null
-                coroutineScope.launch {
-                    try {
-                        val data = mapOf(
-                            "isFounder" to founderStatus,
-                            "founderEntries" to founderEntries
-                        )
-                        firestore.collection("users")
-                            .document(userId)
-                            .set(data)
-                            .await()
-                        isLoading = false
+
+                authViewModel.saveFounderStatus(
+                    userId = userId,
+                    isFounder = founderStatus,
+                    founderEntries = founderEntries
+                ) { success ->
+                    isLoading = false
+                    if (success) {
                         navController.navigate(Screen.AmbitionStatement.route) {
                             popUpTo(Screen.FounderStatus.route) { inclusive = true }
                         }
-                    } catch (e: Exception) {
-                        isLoading = false
-                        errorMessage = "Failed to save founder status: ${e.message}"
-                        Toast.makeText(context, "Failed to save founder status", Toast.LENGTH_SHORT).show()
-                        Log.e("FounderStatusScreen", "Error saving founder status: ${e.message}", e)
+                    } else {
+                        errorMessage = "Failed to save founder status. Please try again."
+                        Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                     }
                 }
             },

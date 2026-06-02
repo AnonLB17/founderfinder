@@ -3,6 +3,7 @@ package com.phoenixcorp.founderfinder.ui.screens
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -12,11 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.data.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.components.AdvisorCard   // ← Fixed import
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch
@@ -24,7 +25,7 @@ import kotlinx.coroutines.tasks.await
 
 @Composable
 fun AdvisorSearchFeatureScreen(navController: NavHostController) {
-    val firestore: FirebaseFirestore = Firebase.firestore
+    val firestore = Firebase.firestore
     var searchQuery by remember { mutableStateOf("") }
     var advisors by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -43,6 +44,7 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                     isLoading = false
                     return@addSnapshotListener
                 }
+
                 if (snapshot != null) {
                     Log.d("AdvisorSearch", "Snapshot received: ${snapshot.documents.size} documents")
                     coroutineScope.launch {
@@ -55,8 +57,10 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                                     .document("data")
                                     .get()
                                     .await()
+
                                 if (advisorDoc.exists()) {
-                                    val advisor = doc.toObject(UserProfile::class.java)?.copy(
+                                    val baseProfile = doc.toObject(UserProfile::class.java)
+                                    val advisor = baseProfile?.copy(
                                         expertise = advisorDoc.getString("expertise"),
                                         experienceYears = advisorDoc.getLong("experienceYears")?.toInt()
                                     )
@@ -71,7 +75,6 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                         Log.d("AdvisorSearch", "Fetched ${advisors.size} advisors")
                     }
                 } else {
-                    Log.w("AdvisorSearch", "Snapshot is null")
                     isLoading = false
                 }
             }
@@ -110,36 +113,22 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                     label = { Text("Search Advisors") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { /* Search handled via state */ }),
+                    keyboardActions = KeyboardActions(onSearch = { /* handled by state */ }),
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { /* Search handled via state */ }) {
-                    Text("Enter")
+                Button(onClick = { /* Search is live via state */ }) {
+                    Text("Search")
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Advisor Sign-Up Button
             Button(
                 onClick = { navController.navigate(Screen.AdvisorSignUp.route) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Advisor Sign Up")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Manual Refresh Button
-            Button(
-                onClick = {
-                    Log.d("AdvisorSearch", "Manual refresh button clicked")
-                    refreshTrigger++
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Refresh Advisors")
+                Text("Become an Advisor")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -164,11 +153,9 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                     LazyColumn {
                         val filteredAdvisors = advisors.filter { advisor ->
                             advisor.firstName?.contains(searchQuery, ignoreCase = true) == true ||
-                                    advisor.lastName?.contains(searchQuery, ignoreCase = true) == true ||
-                                    advisor.expertise?.contains(searchQuery, ignoreCase = true) == true
+                                    advisor.lastName?.contains(searchQuery, ignoreCase = true) == true
                         }
-                        items(filteredAdvisors.size) { index ->
-                            val advisor = filteredAdvisors[index]
+                        items(filteredAdvisors) { advisor ->
                             AdvisorCard(
                                 profile = advisor,
                                 navController = navController

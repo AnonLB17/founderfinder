@@ -1,6 +1,7 @@
 package com.phoenixcorp.founderfinder.data.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.phoenixcorp.founderfinder.domain.model.Investor
 import com.phoenixcorp.founderfinder.domain.model.StartupStage
 import com.phoenixcorp.founderfinder.domain.repository.InvestorRepository
@@ -20,21 +21,43 @@ class InvestorRepositoryImpl @Inject constructor(
         focusAreas: List<String>?
     ): List<Investor> {
         return try {
-            investorsCollection.get().await().toObjects(Investor::class.java)
+            var queryRef: Query = investorsCollection
+
+            // Basic text search (Firestore doesn't support full-text search natively)
+            if (query.isNotBlank()) {
+                queryRef = queryRef.whereEqualTo("name", query)
+                // Note: For better search, consider using Algolia or Typesense later
+            }
+
+            // Filter by minimum investment range
+            if (minInvestment != null) {
+                queryRef = queryRef.whereGreaterThanOrEqualTo("investmentRangeMin", minInvestment.toString())
+            }
+
+            // TODO: Add more filters for stages and focusAreas when needed
+
+            queryRef.get().await().toObjects(Investor::class.java)
         } catch (e: Exception) {
             emptyList()
         }
     }
 
     override suspend fun getInvestorById(uid: String): Investor? {
-        return investorsCollection.document(uid).get().await().toObject(Investor::class.java)
+        return try {
+            investorsCollection.document(uid).get().await().toObject(Investor::class.java)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     override suspend fun getInvestorMatchesForFounder(
         founderId: String,
         limit: Int
     ): List<Investor> {
-        // You can enhance this with matching logic later
-        return investorsCollection.limit(limit.toLong()).get().await().toObjects(Investor::class.java)
+        return try {
+            investorsCollection.limit(limit.toLong()).get().await().toObjects(Investor::class.java)
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 }

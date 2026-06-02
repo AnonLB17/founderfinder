@@ -2,9 +2,9 @@ package com.phoenixcorp.founderfinder.data
 
 import android.net.Uri
 import android.util.Log
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.storage.ktx.storage
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
+import com.google.firebase.storage.storage
 import com.phoenixcorp.founderfinder.ui.screens.Organization
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -15,6 +15,7 @@ interface OrganizationRepository {
 }
 
 class OrganizationRepositoryImpl : OrganizationRepository {
+
     private val db = Firebase.firestore
     private val storage = Firebase.storage
     private val TAG = "OrganizationRepository"
@@ -23,6 +24,7 @@ class OrganizationRepositoryImpl : OrganizationRepository {
         return try {
             val result = db.collection("organizations").get().await()
             Log.d(TAG, "Fetched ${result.size()} organizations from Firestore")
+
             result.documents.mapNotNull { doc ->
                 Organization(
                     name = doc.getString("name") ?: "",
@@ -31,21 +33,24 @@ class OrganizationRepositoryImpl : OrganizationRepository {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching organizations: ${e.message}")
+            Log.e(TAG, "Error fetching organizations: ${e.message}", e)
             emptyList()
         }
     }
 
     override suspend fun saveOrganization(organization: Organization) {
         try {
-            val storageRef = storage.reference
-            val imageUrl = organization.imageUri?.let { uri ->
-                val file = File(Uri.parse(uri).path ?: throw IllegalStateException("Invalid image URI"))
-                val imageRef = storageRef.child("images/${organization.name}_${System.currentTimeMillis()}.jpg")
-                imageRef.putFile(Uri.fromFile(file)).await()
-                val url = imageRef.downloadUrl.await().toString()
-                Log.d(TAG, "Image uploaded to: $url")
-                url
+            var imageUrl: String? = null
+
+            organization.imageUri?.let { uriString ->
+                val uri = Uri.parse(uriString)
+                val file = File(uri.path ?: throw IllegalStateException("Invalid image URI"))
+
+                val imageRef = storage.reference.child("images/${organization.name}_${System.currentTimeMillis()}.jpg")
+                imageRef.putFile(uri).await()
+
+                imageUrl = imageRef.downloadUrl.await().toString()
+                Log.d(TAG, "Image uploaded to: $imageUrl")
             }
 
             val orgData = hashMapOf(
@@ -53,11 +58,13 @@ class OrganizationRepositoryImpl : OrganizationRepository {
                 "description" to organization.description,
                 "imageUrl" to (imageUrl ?: "")
             )
+
             db.collection("organizations").add(orgData).await()
             Log.d(TAG, "Organization saved: ${organization.name}")
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving organization: ${e.message}")
-            throw e // Re-throw to let ViewModel handle it
+            Log.e(TAG, "Error saving organization: ${e.message}", e)
+            throw e
         }
     }
 }

@@ -14,12 +14,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun WorkExperienceScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var jobTitle by remember { mutableStateOf("") }
     var company by remember { mutableStateOf("") }
     var yearsOfExperience by remember { mutableStateOf("") }
@@ -27,7 +31,9 @@ fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthVi
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -73,11 +79,13 @@ fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthVi
                     errorMessage = "Please fill in all work experience fields."
                     return@Button
                 }
-                if (yearsOfExperience.toIntOrNull() == null || yearsOfExperience.toInt() < 0) {
+                val years = yearsOfExperience.toIntOrNull()
+                if (years == null || years < 0) {
                     errorMessage = "Years of experience must be a valid non-negative number."
                     return@Button
                 }
-                workExperiences = workExperiences + "$jobTitle at $company ($yearsOfExperience years)"
+
+                workExperiences = workExperiences + "$jobTitle at $company ($years years)"
                 jobTitle = ""
                 company = ""
                 yearsOfExperience = ""
@@ -90,6 +98,7 @@ fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthVi
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
         if (workExperiences.isNotEmpty()) {
             workExperiences.forEach { experience ->
                 Text(text = experience, style = MaterialTheme.typography.bodyMedium)
@@ -101,7 +110,6 @@ fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthVi
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -110,7 +118,7 @@ fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthVi
         Button(
             onClick = {
                 if (userId == null) {
-                    errorMessage = "You must be logged in to save your work experience."
+                    errorMessage = "You must be logged in."
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
@@ -121,6 +129,7 @@ fun WorkExperienceScreen(navController: NavHostController, authViewModel: AuthVi
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.saveWorkExperience(userId, workExperiences) { success ->
                     isLoading = false
                     if (success) {

@@ -17,10 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.storage.ktx.storage
+import com.google.firebase.firestore.firestore
+import com.google.firebase.storage.storage
 import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.data.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen

@@ -19,7 +19,10 @@ import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun SignUpScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun SignUpScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -69,7 +72,6 @@ fun SignUpScreen(navController: NavHostController, authViewModel: AuthViewModel 
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -96,6 +98,7 @@ fun SignUpScreen(navController: NavHostController, authViewModel: AuthViewModel 
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.registerUser(email, password) { success, message ->
                     isLoading = false
                     if (success) {
@@ -104,7 +107,7 @@ fun SignUpScreen(navController: NavHostController, authViewModel: AuthViewModel 
                         }
                     } else {
                         errorMessage = message ?: "An unknown error occurred."
-                        Toast.makeText(context, "Error: $message", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, message ?: "Sign up failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             },

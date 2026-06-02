@@ -19,7 +19,10 @@ import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun SignInScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun SignInScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -57,7 +60,6 @@ fun SignInScreen(navController: NavHostController, authViewModel: AuthViewModel 
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -69,13 +71,10 @@ fun SignInScreen(navController: NavHostController, authViewModel: AuthViewModel 
                     errorMessage = "Please fill in all fields."
                     return@Button
                 }
-                if (!email.contains("@") || !email.contains(".")) {
-                    errorMessage = "Please enter a valid email address."
-                    return@Button
-                }
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.signInUser(email, password) { success, message ->
                     isLoading = false
                     if (success) {
@@ -83,8 +82,8 @@ fun SignInScreen(navController: NavHostController, authViewModel: AuthViewModel 
                             popUpTo(Screen.SignIn.route) { inclusive = true }
                         }
                     } else {
-                        errorMessage = message ?: "An unknown error occurred."
-                        Toast.makeText(context, "Error: $message", Toast.LENGTH_SHORT).show()
+                        errorMessage = message ?: "Sign in failed. Please try again."
+                        Toast.makeText(context, message ?: "Sign in failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             },

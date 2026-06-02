@@ -12,18 +12,24 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun IndustriesOfInterestScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun IndustriesOfInterestScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var keyword by remember { mutableStateOf("") }
     var industries by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -49,11 +55,12 @@ fun IndustriesOfInterestScreen(navController: NavHostController, authViewModel: 
                     errorMessage = "Please enter an industry."
                     return@Button
                 }
-                if (industries.contains(keyword.trim())) {
+                val trimmed = keyword.trim()
+                if (industries.contains(trimmed)) {
                     errorMessage = "This industry is already added."
                     return@Button
                 }
-                industries = industries + keyword.trim()
+                industries = industries + trimmed
                 keyword = ""
                 errorMessage = null
             },
@@ -64,6 +71,7 @@ fun IndustriesOfInterestScreen(navController: NavHostController, authViewModel: 
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
         if (industries.isNotEmpty()) {
             industries.forEach { industry ->
                 Text(text = industry, style = MaterialTheme.typography.bodyMedium)
@@ -75,7 +83,6 @@ fun IndustriesOfInterestScreen(navController: NavHostController, authViewModel: 
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -84,7 +91,7 @@ fun IndustriesOfInterestScreen(navController: NavHostController, authViewModel: 
         Button(
             onClick = {
                 if (userId == null) {
-                    errorMessage = "You must be logged in to save your industries."
+                    errorMessage = "You must be logged in."
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
@@ -95,6 +102,7 @@ fun IndustriesOfInterestScreen(navController: NavHostController, authViewModel: 
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.saveIndustriesOfInterest(userId, industries) { success ->
                     isLoading = false
                     if (success) {

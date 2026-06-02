@@ -2,24 +2,26 @@ package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun EducationScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun EducationScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var highestEducation by remember { mutableStateOf("") }
     var institution by remember { mutableStateOf("") }
     var areaOfStudy by remember { mutableStateOf("") }
@@ -27,7 +29,9 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -51,7 +55,7 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
         OutlinedTextField(
             value = areaOfStudy,
             onValueChange = { areaOfStudy = it },
-            label = { Text("Area of Study") },
+            label = { Text("Area of Study / Major") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
         )
@@ -81,10 +85,11 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
         ) {
-            Text("+ Add")
+            Text("+ Add Education")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
         if (educationEntries.isNotEmpty()) {
             educationEntries.forEach { entry ->
                 Text(text = entry, style = MaterialTheme.typography.bodyMedium)
@@ -96,7 +101,6 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -105,7 +109,7 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
         Button(
             onClick = {
                 if (userId == null) {
-                    errorMessage = "You must be logged in to save your education."
+                    errorMessage = "You must be logged in."
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
@@ -116,6 +120,7 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
 
                 isLoading = true
                 errorMessage = null
+
                 authViewModel.saveEducation(userId, educationEntries) { success ->
                     isLoading = false
                     if (success) {
@@ -124,7 +129,7 @@ fun EducationScreen(navController: NavHostController, authViewModel: AuthViewMod
                         }
                     } else {
                         errorMessage = "Failed to save education details. Please try again."
-                        Toast.makeText(context, "Failed to save education details", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                     }
                 }
             },

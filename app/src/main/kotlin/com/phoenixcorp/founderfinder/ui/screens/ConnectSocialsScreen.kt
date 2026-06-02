@@ -12,12 +12,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
-fun ConnectSocialsScreen(navController: NavHostController, authViewModel: AuthViewModel = viewModel()) {
+fun ConnectSocialsScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var linkedin by remember { mutableStateOf("") }
     var twitter by remember { mutableStateOf("") }
     var facebook by remember { mutableStateOf("") }
@@ -26,7 +30,9 @@ fun ConnectSocialsScreen(navController: NavHostController, authViewModel: AuthVi
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+    val currentUser = Firebase.auth.currentUser
+    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -50,7 +56,7 @@ fun ConnectSocialsScreen(navController: NavHostController, authViewModel: AuthVi
         OutlinedTextField(
             value = twitter,
             onValueChange = { twitter = it },
-            label = { Text("Twitter Profile URL") },
+            label = { Text("Twitter / X Profile URL") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
         )
@@ -81,9 +87,9 @@ fun ConnectSocialsScreen(navController: NavHostController, authViewModel: AuthVi
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
         )
+
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show error message if any
         errorMessage?.let {
             Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -92,21 +98,22 @@ fun ConnectSocialsScreen(navController: NavHostController, authViewModel: AuthVi
         Button(
             onClick = {
                 if (userId == null) {
-                    errorMessage = "You must be logged in to save your social links."
+                    errorMessage = "You must be logged in."
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                // Allow proceeding even if all fields are empty (optional fields)
-                // Basic URL validation could be added here if required
-                val trimmedLinkedin = linkedin.trim().ifEmpty { "null" }
-                val trimmedTwitter = twitter.trim().ifEmpty { "null" }
-                val trimmedFacebook = facebook.trim().ifEmpty { "null" }
-                val trimmedInstagram = instagram.trim().ifEmpty { "null" }
-                val trimmedWebsite = website.trim().ifEmpty { "null" }
 
                 isLoading = true
                 errorMessage = null
-                authViewModel.saveSocials(userId, trimmedLinkedin, trimmedTwitter, trimmedFacebook, trimmedInstagram, trimmedWebsite) { success ->
+
+                authViewModel.saveSocials(
+                    userId = userId,
+                    linkedin = linkedin.trim(),
+                    twitter = twitter.trim(),
+                    facebook = facebook.trim(),
+                    instagram = instagram.trim(),
+                    website = website.trim()
+                ) { success ->
                     isLoading = false
                     if (success) {
                         navController.navigate(Screen.IndustriesOfInterest.route) {
@@ -114,7 +121,7 @@ fun ConnectSocialsScreen(navController: NavHostController, authViewModel: AuthVi
                         }
                     } else {
                         errorMessage = "Failed to save social links. Please try again."
-                        Toast.makeText(context, "Failed to save social links", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
