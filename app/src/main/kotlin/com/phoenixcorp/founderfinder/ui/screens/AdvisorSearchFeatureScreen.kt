@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
-import com.phoenixcorp.founderfinder.data.UserProfile
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.AdvisorCard   // ← Fixed import
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar

@@ -1,6 +1,6 @@
-package com.phoenixcorp.founderfinder.data
+package com.phoenixcorp.founderfinder.domain.model
 
-data class Organizations(
+data class Organization(
     val orgId: String = "",
     val name: String = "",
     val description: String = "",

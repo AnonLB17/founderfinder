@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.phoenixcorp.founderfinder.data.Activity
+import com.phoenixcorp.founderfinder.domain.model.Activity
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max

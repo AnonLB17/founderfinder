@@ -25,8 +25,8 @@ import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.File
-import com.phoenixcorp.founderfinder.data.Organizations
+import com.phoenixcorp.founderfinder.domain.model.File
+import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
@@ -49,7 +49,7 @@ fun OrganizationDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var organization by remember { mutableStateOf<Organizations?>(null) }
+    var organization by remember { mutableStateOf<Organization?>(null) }
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
     var filesError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -84,7 +84,7 @@ fun OrganizationDetailsScreen(
                 isLoading = false
                 return@LaunchedEffect
             }
-            organization = orgDoc.toObject(Organizations::class.java)?.copy(orgId = orgDoc.id)
+            organization = orgDoc.toObject(Organization::class.java)?.copy(orgId = orgDoc.id)
             Log.d("OrganizationDetailsScreen", "Organization data: ${orgDoc.data}")
 
             // Fetch files

@@ -27,10 +27,10 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 
 
-import com.phoenixcorp.founderfinder.data.Invitation
-import com.phoenixcorp.founderfinder.data.Message
-import com.phoenixcorp.founderfinder.data.Organizations
-import com.phoenixcorp.founderfinder.data.UserProfile
+import com.phoenixcorp.founderfinder.domain.model.Invitation
+import com.phoenixcorp.founderfinder.domain.model.Message
+import com.phoenixcorp.founderfinder.domain.model.Organization
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.OrganizationCard
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
@@ -54,10 +54,10 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
     var recipientName by remember { mutableStateOf("Loading...") }
     var recipientProfilePicture by remember { mutableStateOf<String?>(null) }
     var showOrgDialog by remember { mutableStateOf(false) }
-    var organizations by remember { mutableStateOf<List<Organizations>>(emptyList()) }
+    var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
     var recipientType by remember { mutableStateOf<String?>(null) }
     var showTypeDialog by remember { mutableStateOf(false) }
-    var selectedOrg by remember { mutableStateOf<Organizations?>(null) }
+    var selectedOrg by remember { mutableStateOf<Organization?>(null) }
     var messageListener by remember { mutableStateOf<ListenerRegistration?>(null) }
 
     // Compute sorted conversationId
@@ -176,7 +176,7 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
                     .await()
                 organizations = snapshot.documents.mapNotNull { doc ->
                     try {
-                        Organizations(
+                        Organization(
                             orgId = doc.id,
                             name = doc.getString("name") ?: "",
                             description = doc.getString("description") ?: "",

@@ -1,6 +1,4 @@
-package com.phoenixcorp.founderfinder.data
-
-import com.google.firebase.firestore.PropertyName
+package com.phoenixcorp.founderfinder.domain.model
 
 data class Thread(
     val id: String = "",

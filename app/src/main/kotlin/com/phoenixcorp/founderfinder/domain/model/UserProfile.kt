@@ -1,4 +1,4 @@
-package com.phoenixcorp.founderfinder.data
+package com.phoenixcorp.founderfinder.domain.model
 
 import com.google.firebase.firestore.IgnoreExtraProperties
 
@@ -50,19 +50,19 @@ data class UserProfile(
 /**
  * Convert UserProfile to domain.model.User
  */
-fun UserProfile.toUser(): com.phoenixcorp.founderfinder.domain.model.User {
+fun UserProfile.toUser(): User {
     val fullName = listOfNotNull(firstName, lastName)
         .joinToString(" ")
         .ifBlank { "Unknown User" }
 
-    return com.phoenixcorp.founderfinder.domain.model.User(
+    return User(
         uid = this.userId ?: "",
         name = fullName,
         email = this.email,
         school = null,                    // Not stored in UserProfile yet
         bio = this.bio,
         profileImageUrl = this.profilePicture,
-        role = com.phoenixcorp.founderfinder.domain.model.UserRole.FOUNDER, // Default - adjust as needed
+        role = UserRole.FOUNDER, // Default - adjust as needed
         interests = this.industries ?: emptyList(),
         isVerified = false
     )
@@ -71,7 +71,7 @@ fun UserProfile.toUser(): com.phoenixcorp.founderfinder.domain.model.User {
 /**
  * Convert domain User back to UserProfile
  */
-fun com.phoenixcorp.founderfinder.domain.model.User.toUserProfile(): UserProfile {
+fun User.toUserProfile(): UserProfile {
     val nameParts = this.name.split(" ")
     return UserProfile(
         userId = this.uid,

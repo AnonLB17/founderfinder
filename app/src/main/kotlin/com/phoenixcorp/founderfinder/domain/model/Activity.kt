@@ -1,4 +1,4 @@
-package com.phoenixcorp.founderfinder.data
+package com.phoenixcorp.founderfinder.domain.model
 
 data class Activity(
     val id: String = "",

@@ -28,7 +28,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.Forum
+import com.phoenixcorp.founderfinder.domain.model.Forum
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.navigation.Screen

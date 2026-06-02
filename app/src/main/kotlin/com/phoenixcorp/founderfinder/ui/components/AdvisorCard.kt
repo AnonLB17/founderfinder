@@ -22,8 +22,8 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.RoleProfile
-import com.phoenixcorp.founderfinder.data.UserProfile
+import com.phoenixcorp.founderfinder.domain.model.RoleProfile
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await

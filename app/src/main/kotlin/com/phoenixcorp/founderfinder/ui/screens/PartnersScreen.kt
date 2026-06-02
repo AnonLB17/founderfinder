@@ -29,9 +29,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.Activity
-import com.phoenixcorp.founderfinder.data.Organizations
-import com.phoenixcorp.founderfinder.data.UserProfile
+import com.phoenixcorp.founderfinder.domain.model.Activity
+import com.phoenixcorp.founderfinder.domain.model.Organization
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.CalendarSection
@@ -48,7 +48,7 @@ fun PartnersScreen(navController: NavHostController) {
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
     val coroutineScope = rememberCoroutineScope()
-    var organizations by remember { mutableStateOf<List<Organizations>>(emptyList()) }
+    var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
     var partnersByOrg by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
     var userProfiles by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
     var activities by remember { mutableStateOf<List<Activity>>(emptyList()) }
@@ -94,7 +94,7 @@ fun PartnersScreen(navController: NavHostController) {
                 .await()
             val createdOrgs = createdOrgSnapshot.documents.mapNotNull { doc ->
                 try {
-                    doc.toObject(Organizations::class.java)?.copy(orgId = doc.id)
+                    doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
                 } catch (e: Exception) {
                     Log.e("PartnersScreen", "Error parsing created organization ${doc.id}: ${e.message}")
                     null
@@ -136,7 +136,7 @@ fun PartnersScreen(navController: NavHostController) {
                     .await()
                     .documents.mapNotNull { doc ->
                         try {
-                            doc.toObject(Organizations::class.java)?.copy(orgId = doc.id)
+                            doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
                         } catch (e: Exception) {
                             Log.e("PartnersScreen", "Error parsing invited organization ${doc.id}: ${e.message}")
                             null

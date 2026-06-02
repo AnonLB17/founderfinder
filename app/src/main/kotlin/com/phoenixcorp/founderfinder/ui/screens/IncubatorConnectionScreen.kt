@@ -14,7 +14,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.firebase.firestore.FirebaseFirestore
-import com.phoenixcorp.founderfinder.data.Incubator
+import com.phoenixcorp.founderfinder.domain.model.Incubator
 import com.phoenixcorp.founderfinder.ui.components.IncubatorCard
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch

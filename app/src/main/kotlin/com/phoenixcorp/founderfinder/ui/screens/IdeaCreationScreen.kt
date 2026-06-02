@@ -27,7 +27,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.Organizations
+import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch
@@ -42,8 +42,8 @@ fun IdeaCreationScreen(navController: NavHostController) {
     val auth = FirebaseAuth.getInstance()
     val coroutineScope = rememberCoroutineScope()
 
-    var organizations by remember { mutableStateOf<List<Organizations>>(emptyList()) }
-    var selectedOrganizations by remember { mutableStateOf<Organizations?>(null) }
+    var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
+    var selectedOrganization by remember { mutableStateOf<Organization?>(null) }
     var isCreatingOrganization by remember { mutableStateOf(false) }
     var businessName by remember { mutableStateOf("") }
     var ideaDescription by remember { mutableStateOf("") }
@@ -77,7 +77,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
                 .await()
             organizations = snapshot.documents.mapNotNull { doc ->
                 try {
-                    Organizations(
+                    Organization(
                         orgId = doc.id,
                         name = doc.getString("name") ?: "",
                         description = doc.getString("description") ?: "",
@@ -152,7 +152,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
                                     .size(50.dp)
                                     .clip(CircleShape)
                                     .clickable {
-                                        selectedOrganizations = org
+                                        selectedOrganization = org
                                         isCreatingOrganization = false
                                         businessName = org.name
                                         ideaDescription = org.description
@@ -169,7 +169,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
                             .size(50.dp)
                             .clickable {
                                 isCreatingOrganization = true
-                                selectedOrganizations = null
+                                selectedOrganization = null
                                 businessName = ""
                                 ideaDescription = ""
                                 selectedImageUri = null
@@ -187,7 +187,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                if (isCreatingOrganization || selectedOrganizations != null) {
+                if (isCreatingOrganization || selectedOrganization != null) {
                     Text(
                         text = if (isCreatingOrganization) "Create New Organization" else "Edit Organization",
                         style = MaterialTheme.typography.headlineSmall
@@ -245,14 +245,14 @@ fun IdeaCreationScreen(navController: NavHostController) {
                             }
                             try {
                                 val currentUser = auth.currentUser ?: throw Exception("User not signed in")
-                                var imageUri: String? = selectedOrganizations?.imageUri
-                                if (selectedImageUri != null && selectedImageUri != selectedOrganizations?.imageUri) {
+                                var imageUri: String? = selectedOrganization?.imageUri
+                                if (selectedImageUri != null && selectedImageUri != selectedOrganization?.imageUri) {
                                     val storageRef = storage.reference.child("organization_images/${UUID.randomUUID()}.jpg")
                                     storageRef.putFile(Uri.parse(selectedImageUri)).await()
                                     imageUri = storageRef.downloadUrl.await().toString()
                                 }
-                                val orgData = Organizations(
-                                    orgId = selectedOrganizations?.orgId ?: UUID.randomUUID().toString(),
+                                val orgData = Organization(
+                                    orgId = selectedOrganization?.orgId ?: UUID.randomUUID().toString(),
                                     name = businessName,
                                     description = ideaDescription,
                                     imageUri = imageUri,
@@ -262,12 +262,12 @@ fun IdeaCreationScreen(navController: NavHostController) {
                                     .document(orgData.orgId)
                                     .set(orgData)
                                     .await()
-                                organizations = if (selectedOrganizations == null) {
+                                organizations = if (selectedOrganization == null) {
                                     organizations + orgData
                                 } else {
                                     organizations.map { if (it.orgId == orgData.orgId) orgData else it }
                                 }
-                                selectedOrganizations = orgData
+                                selectedOrganization = orgData
                                 // Save selected orgId to SharedPreferences
                                 context.getSharedPreferences("founderfinder", Context.MODE_PRIVATE)
                                     .edit()
@@ -288,8 +288,8 @@ fun IdeaCreationScreen(navController: NavHostController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
-                    if (selectedOrganizations != null) {
-                        navController.navigate(Screen.OrganizationFiles.createRoute(selectedOrganizations!!.orgId))
+                    if (selectedOrganization != null) {
+                        navController.navigate(Screen.OrganizationFiles.createRoute(selectedOrganization!!.orgId))
                     } else {
                         errorMessage = "Please select or create an organization first."
                     }

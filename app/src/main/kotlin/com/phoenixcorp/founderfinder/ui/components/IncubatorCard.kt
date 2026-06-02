@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.phoenixcorp.founderfinder.data.Incubator
+import com.phoenixcorp.founderfinder.domain.model.Incubator
 
 @Composable
 fun IncubatorCard(incubator: Incubator) {

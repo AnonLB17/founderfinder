@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
-import com.phoenixcorp.founderfinder.data.Comment
+import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.R
 import java.text.SimpleDateFormat

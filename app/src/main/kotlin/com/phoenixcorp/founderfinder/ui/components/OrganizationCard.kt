@@ -1,10 +1,6 @@
 package com.phoenixcorp.founderfinder.ui.components
 
-import android.content.Intent
-import android.net.Uri
 import android.util.Log
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -32,7 +28,7 @@ import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.data.Organizations
+import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -40,7 +36,7 @@ import kotlin.math.abs
 
 @Composable
 fun OrganizationCard(
-    organization: Organizations? = null,
+    organization: Organization? = null,
     orgId: String? = null,
     invitationId: String = "",
     navController: NavHostController,
@@ -48,7 +44,7 @@ fun OrganizationCard(
     modifier: Modifier = Modifier
 ) {
     val firestore = FirebaseFirestore.getInstance()
-    var fetchedOrganization by remember { mutableStateOf<Organizations?>(null) }
+    var fetchedOrganization by remember { mutableStateOf<Organization?>(null) }
     var isLoading by remember { mutableStateOf(organization == null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val auth = FirebaseAuth.getInstance()
@@ -67,7 +63,7 @@ fun OrganizationCard(
                     .document(orgId)
                     .get()
                     .await()
-                fetchedOrganization = doc.toObject(Organizations::class.java)?.copy(orgId = doc.id)
+                fetchedOrganization = doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
                 isLoading = false
             } catch (e: Exception) {
                 errorMessage = "Failed to load organization: ${e.message}"

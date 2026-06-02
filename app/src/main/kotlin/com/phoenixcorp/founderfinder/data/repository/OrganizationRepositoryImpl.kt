@@ -1,20 +1,17 @@
-package com.phoenixcorp.founderfinder.data
+package com.phoenixcorp.founderfinder.data.repository
 
 import android.net.Uri
 import android.util.Log
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 import com.google.firebase.storage.storage
-import com.phoenixcorp.founderfinder.ui.screens.Organization
+import com.phoenixcorp.founderfinder.domain.model.Organization
+import com.phoenixcorp.founderfinder.domain.repository.OrganizationRepository
 import kotlinx.coroutines.tasks.await
 import java.io.File
+import javax.inject.Inject
 
-interface OrganizationRepository {
-    suspend fun getOrganizations(): List<Organization>
-    suspend fun saveOrganization(organization: Organization)
-}
-
-class OrganizationRepositoryImpl : OrganizationRepository {
+class OrganizationRepositoryImpl @Inject constructor() : OrganizationRepository {
 
     private val db = Firebase.firestore
     private val storage = Firebase.storage

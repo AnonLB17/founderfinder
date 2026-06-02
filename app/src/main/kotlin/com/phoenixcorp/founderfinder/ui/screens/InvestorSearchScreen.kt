@@ -2,20 +2,18 @@ package com.phoenixcorp.founderfinder.ui.screens
 
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Investor
-import com.phoenixcorp.founderfinder.data.Organizations
+import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.InvestorCard
@@ -33,7 +31,7 @@ fun InvestorSearchScreen(navController: NavHostController) {
     val currentUser = auth.currentUser
     val coroutineScope = rememberCoroutineScope()
     var investors by remember { mutableStateOf<List<Investor>>(emptyList()) }
-    var organizations by remember { mutableStateOf<List<Organizations>>(emptyList()) }
+    var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
     var isInvestorSearch by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
@@ -112,7 +110,7 @@ fun InvestorSearchScreen(navController: NavHostController) {
                     .await()
                 organizations = snapshot.documents.mapNotNull { doc ->
                     try {
-                        doc.toObject(Organizations::class.java)?.copy(orgId = doc.id)
+                        doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
                     } catch (e: Exception) {
                         Log.e("InvestorSearchScreen", "Error parsing organization ${doc.id}: ${e.message}", e)
                         null
