@@ -94,7 +94,7 @@ fun PartnersScreen(navController: NavHostController) {
                 .await()
             val createdOrgs = createdOrgSnapshot.documents.mapNotNull { doc ->
                 try {
-                    doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
+                    doc.toObject(Organization::class.java)?.copy(id = doc.id)
                 } catch (e: Exception) {
                     Log.e("PartnersScreen", "Error parsing created organization ${doc.id}: ${e.message}")
                     null
@@ -136,7 +136,7 @@ fun PartnersScreen(navController: NavHostController) {
                     .await()
                     .documents.mapNotNull { doc ->
                         try {
-                            doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
+                            doc.toObject(Organization::class.java)?.copy(id = doc.id)
                         } catch (e: Exception) {
                             Log.e("PartnersScreen", "Error parsing invited organization ${doc.id}: ${e.message}")
                             null
@@ -147,31 +147,31 @@ fun PartnersScreen(navController: NavHostController) {
             }
 
             // Merge organizations
-            organizations = (createdOrgs + invitedOrgs).distinctBy { it.orgId }
+            organizations = (createdOrgs + invitedOrgs).distinctBy { it.id }
             Log.d("PartnersScreen", "Total fetched ${organizations.size} organizations")
 
             // Fetch partners for each organization
             val partnersMap = mutableMapOf<String, List<String>>()
             organizations.forEach { org ->
                 try {
-                    Log.d("PartnersScreen", "Fetching partners for organization: ${org.orgId}")
+                    Log.d("PartnersScreen", "Fetching partners for organization: ${org.id}")
                     val partnerSnapshot = firestore.collection("organizations")
-                        .document(org.orgId)
+                        .document(org.id)
                         .collection("partners")
                         .get()
                         .await()
                     val partnerIds = partnerSnapshot.documents.mapNotNull { it.id }
                     val collaboratorSnapshot = firestore.collection("organizations")
-                        .document(org.orgId)
+                        .document(org.id)
                         .collection("collaborators")
                         .get()
                         .await()
                     val collaboratorIds = collaboratorSnapshot.documents.mapNotNull { it.id }
                     val allPartnerIds = (partnerIds + collaboratorIds + listOf(org.creatorId)).distinct()
-                    partnersMap[org.orgId] = allPartnerIds
-                    Log.d("PartnersScreen", "Org ${org.orgId} collaborators: $allPartnerIds")
+                    partnersMap[org.id] = allPartnerIds
+                    Log.d("PartnersScreen", "Org ${org.id} collaborators: $allPartnerIds")
                 } catch (e: Exception) {
-                    Log.e("PartnersScreen", "Error fetching partners for ${org.orgId}: ${e.message}")
+                    Log.e("PartnersScreen", "Error fetching partners for ${org.id}: ${e.message}")
                 }
             }
             partnersByOrg = partnersMap
@@ -203,7 +203,7 @@ fun PartnersScreen(navController: NavHostController) {
     // Real-time activity listeners
     LaunchedEffect(organizations, currentUser) {
         if (currentUser == null) return@LaunchedEffect
-        val orgIds = organizations.map { it.orgId }
+        val orgIds = organizations.map { it.id }
         activityListener?.remove()
         orgActivityListeners.values.forEach { it.remove() }
         val newListeners = mutableMapOf<String, ListenerRegistration>()
@@ -278,15 +278,15 @@ fun PartnersScreen(navController: NavHostController) {
     // Auto-select organization
     LaunchedEffect(organizations) {
         if (selectedOrgId == null && organizations.isNotEmpty()) {
-            selectedOrgId = organizations.first().orgId
-            Log.d("PartnersScreen", "Auto-selected organization: ${organizations.first().orgId}")
+            selectedOrgId = organizations.first().id
+            Log.d("PartnersScreen", "Auto-selected organization: ${organizations.first().id}")
         }
     }
 
     // Calendar title
     val calendarTitle = when {
         selectedOrgId != null -> {
-            val orgName = organizations.find { it.orgId == selectedOrgId }?.name ?: "Organization"
+            val orgName = organizations.find { it.id == selectedOrgId }?.name ?: "Organization"
             "$orgName Calendar"
         }
         selectedPartnerId != null -> {
@@ -366,24 +366,24 @@ fun PartnersScreen(navController: NavHostController) {
                                     .size(80.dp)
                                     .clip(CircleShape)
                                     .padding(8.dp)
-                                    .pointerInput(org.orgId) {
+                                    .pointerInput(org.id) {
                                         detectTapGestures(
                                             onTap = {
-                                                selectedOrgId = org.orgId
+                                                selectedOrgId = org.id
                                                 selectedPartnerId = null
-                                                Log.d("PartnersScreen", "Tapped organization: ${org.orgId}, showing calendar")
+                                                Log.d("PartnersScreen", "Tapped organization: ${org.id}, showing calendar")
                                             },
                                             onLongPress = {
-                                                if (lastNavigatedOrgId != org.orgId) {
-                                                    lastNavigatedOrgId = org.orgId
-                                                    Log.d("PartnersScreen", "Long pressed organization: ${org.orgId}, navigating to group chat")
-                                                    navController.navigate(Screen.GroupChat.createRoute(org.orgId)) {
+                                                if (lastNavigatedOrgId != org.id) {
+                                                    lastNavigatedOrgId = org.id
+                                                    Log.d("PartnersScreen", "Long pressed organization: ${org.id}, navigating to group chat")
+                                                    navController.navigate(Screen.GroupChat.createRoute(org.id)) {
                                                         launchSingleTop = true
                                                         restoreState = true
                                                         popUpTo(Screen.Partners.route) { inclusive = false }
                                                     }
                                                 } else {
-                                                    Log.d("PartnersScreen", "Skipping redundant navigation to group chat for orgId: ${org.orgId}")
+                                                    Log.d("PartnersScreen", "Skipping redundant navigation to group chat for orgId: ${org.id}")
                                                 }
                                             }
                                         )
@@ -391,7 +391,7 @@ fun PartnersScreen(navController: NavHostController) {
                             )
 
                             // Partners Profile Pictures
-                            partnersByOrg[org.orgId]?.forEach { partnerId ->
+                            partnersByOrg[org.id]?.forEach { partnerId ->
                                 val profile = userProfiles[partnerId]
                                 Image(
                                     painter = profile?.profilePicture?.takeIf { it.isNotEmpty() }?.let {
@@ -463,7 +463,7 @@ fun PartnersScreen(navController: NavHostController) {
                     onDayLongPress = { day ->
                         selectedDay = day
                         if (selectedOrgId == null && organizations.isNotEmpty()) {
-                            selectedOrgId = organizations.first().orgId
+                            selectedOrgId = organizations.first().id
                             Toast.makeText(context, "Selected organization: ${organizations.first().name}", Toast.LENGTH_SHORT).show()
                         }
                         showActivityInput = true

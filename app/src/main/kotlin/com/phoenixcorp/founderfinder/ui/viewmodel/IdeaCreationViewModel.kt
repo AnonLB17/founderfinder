@@ -1,17 +1,19 @@
-package com.phoenixcorp.founderfinder.ui.screens
+package com.phoenixcorp.founderfinder.ui.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.phoenixcorp.founderfinder.data.OrganizationRepository
+import com.phoenixcorp.founderfinder.domain.model.Organization
+import com.phoenixcorp.founderfinder.domain.repository.OrganizationRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-data class Organization(val name: String, val description: String, val imageUri: String?)
+class IdeaCreationViewModel(
+    private val repository: OrganizationRepository
+) : ViewModel() {
 
-class IdeaCreationViewModel(private val repository: OrganizationRepository) : ViewModel() {
     private val _organizations = MutableStateFlow<List<Organization>>(emptyList())
     val organizations: StateFlow<List<Organization>> = _organizations
 
@@ -41,7 +43,12 @@ class IdeaCreationViewModel(private val repository: OrganizationRepository) : Vi
 
     private fun loadOrganizations() {
         viewModelScope.launch(Dispatchers.IO) {
-            _organizations.value = repository.getOrganizations()
+            try {
+                _organizations.value = repository.getOrganizations()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load organizations", e)
+                _errorMessage.value = "Failed to load organizations"
+            }
         }
     }
 
@@ -49,23 +56,30 @@ class IdeaCreationViewModel(private val repository: OrganizationRepository) : Vi
         val name = _businessName.value
         val description = _ideaDescription.value
         val imageUri = _selectedImageUri.value
-        if (name.isNotBlank() && description.isNotBlank()) {
-            val newOrg = Organization(name, description, imageUri)
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    Log.d(TAG, "Submitting organization: $name")
-                    repository.saveOrganization(newOrg)
-                    _organizations.value = _organizations.value + newOrg
-                    resetForm()
-                    _errorMessage.value = null
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to submit organization: ${e.message}")
-                    _errorMessage.value = "Failed to save organization: ${e.message}"
-                }
-            }
-        } else {
+
+        if (name.isBlank() || description.isBlank()) {
             _errorMessage.value = "Please fill in both name and description"
-            Log.w(TAG, "Submit failed: Name or description is blank")
+            return
+        }
+
+        val newOrg = Organization(
+            name = name,
+            description = description,
+            imageUri = imageUri
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Submitting new organization: $name")
+                repository.saveOrganization(newOrg)
+
+                _organizations.value = _organizations.value + newOrg
+                resetForm()
+                _errorMessage.value = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to submit organization", e)
+                _errorMessage.value = "Failed to save organization: ${e.message}"
+            }
         }
     }
 
@@ -74,25 +88,33 @@ class IdeaCreationViewModel(private val repository: OrganizationRepository) : Vi
         val name = _businessName.value
         val description = _ideaDescription.value
         val imageUri = _selectedImageUri.value ?: selectedOrg.imageUri
-        if (name.isNotBlank() && description.isNotBlank()) {
-            val updatedOrg = Organization(name, description, imageUri)
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    Log.d(TAG, "Updating organization: $name")
-                    repository.saveOrganization(updatedOrg)
-                    _organizations.value = _organizations.value.map {
-                        if (it == selectedOrg) updatedOrg else it
-                    }
-                    resetForm()
-                    _errorMessage.value = null
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to update organization: ${e.message}")
-                    _errorMessage.value = "Failed to update organization: ${e.message}"
-                }
-            }
-        } else {
+
+        if (name.isBlank() || description.isBlank()) {
             _errorMessage.value = "Please fill in both name and description"
-            Log.w(TAG, "Update failed: Name or description is blank")
+            return
+        }
+
+        val updatedOrg = Organization(
+            id = selectedOrg.id,
+            name = name,
+            description = description,
+            imageUri = imageUri
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Updating organization: $name")
+                repository.saveOrganization(updatedOrg)
+
+                _organizations.value = _organizations.value.map {
+                    if (it.id == selectedOrg.id) updatedOrg else it
+                }
+                resetForm()
+                _errorMessage.value = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update organization", e)
+                _errorMessage.value = "Failed to update organization: ${e.message}"
+            }
         }
     }
 
@@ -128,7 +150,7 @@ class IdeaCreationViewModel(private val repository: OrganizationRepository) : Vi
         _businessName.value = ""
         _ideaDescription.value = ""
         _selectedImageUri.value = null
-        _isCreatingOrganization.value = false
         _selectedOrganization.value = null
+        _isCreatingOrganization.value = false
     }
 }

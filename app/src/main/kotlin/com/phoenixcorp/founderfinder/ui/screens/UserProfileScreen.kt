@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,23 +72,16 @@ fun UserProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         item {
-                            // Profile Image, Name, and all sections...
-                            // (same as previous version)
-                            user.profilePicture?.takeIf { it.isNotEmpty() }?.let { picture ->
-                                Image(
-                                    painter = rememberAsyncImagePainter(picture),
-                                    contentDescription = "Profile Picture",
-                                    modifier = Modifier
-                                        .size(120.dp)
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } ?: Image(
-                                painter = painterResource(id = R.drawable.ic_profile_placeholder),
-                                contentDescription = "Default",
+                            // Profile Picture
+                            Image(
+                                painter = rememberAsyncImagePainter(
+                                    model = user.profilePicture ?: R.drawable.ic_profile_placeholder
+                                ),
+                                contentDescription = "Profile Picture",
                                 modifier = Modifier
                                     .size(120.dp)
-                                    .clip(CircleShape)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -97,32 +91,101 @@ fun UserProfileScreen(
                                 style = MaterialTheme.typography.headlineMedium
                             )
 
-                            Spacer(modifier = Modifier.height(24.dp))
+                            user.birthDate?.let {
+                                Text(text = "Born: $it", style = MaterialTheme.typography.bodyMedium)
+                            }
 
+                            Spacer(modifier = Modifier.height(32.dp))
+
+                            // Matching Firestore field names
                             ProfileSection(title = "Ambition Statement") {
                                 Text(user.ambitionStatement ?: "Not provided")
                             }
 
+                            // === UPDATED FOUNDER STATUS SECTION ===
                             ProfileSection(title = "Founder Status") {
-                                val isFounder = user.founderStatus ?: false
-                                Text(if (isFounder) "Founder" else "Not a Founder")
-                                if (isFounder) user.founderEntries?.forEach { Text("• $it") }
+                                val isFounder = user.isFounder ?: false   // Force fallback
+
+                                Log.d("DEBUG_PROFILE", "isFounder from model = $isFounder | founderEntries size = ${user.founderEntries.size}")
+
+                                if (isFounder) {
+                                    Text(
+                                        text = "✅ Founder",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    if (user.founderEntries.isNotEmpty()) {
+                                        user.founderEntries.forEach { entry ->
+                                            Text(
+                                                text = "• $entry",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+                                    } else {
+                                        Text("Founder (No startup details provided)")
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Not a founder yet",
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
                             }
 
                             ProfileSection(title = "Education") {
-                                user.educationEntries?.forEach { Text("• $it") } ?: Text("Not provided")
+                                if (user.educationEntries.isNotEmpty()) {
+                                    user.educationEntries.forEach { entry ->
+                                        Text("• $entry", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                } else {
+                                    Text("No education added")
+                                }
                             }
 
                             ProfileSection(title = "Work Experience") {
-                                user.workExperiences?.forEach { Text("• $it") } ?: Text("Not provided")
+                                if (user.workExperiences.isNotEmpty()) {
+                                    user.workExperiences.forEach { entry ->
+                                        Text("• $entry", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                } else {
+                                    Text("No work experience added")
+                                }
                             }
 
                             ProfileSection(title = "Industries of Interest") {
-                                user.industries?.forEach { Text("• $it") } ?: Text("Not provided")
+                                if (user.industriesOfInterest.isNotEmpty()) {
+                                    user.industriesOfInterest.forEach { industry ->
+                                        Text("• $industry", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                } else {
+                                    Text("No industries selected")
+                                }
                             }
 
                             ProfileSection(title = "Organizations of Interest") {
-                                user.organizations?.forEach { Text("• $it") } ?: Text("Not provided")
+                                if (user.organizationsOfInterest.isNotEmpty()) {
+                                    user.organizationsOfInterest.forEach { org ->
+                                        Text("• $org", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                } else {
+                                    Text("No organizations selected")
+                                }
+                            }
+
+                            ProfileSection(title = "Social Links") {
+                                user.linkedinUrl?.takeIf { it.isNotBlank() }?.let { Text("LinkedIn: $it") }
+                                user.twitterUrl?.takeIf { it.isNotBlank() }?.let { Text("Twitter/X: $it") }
+                                user.facebookUrl?.takeIf { it.isNotBlank() }?.let { Text("Facebook: $it") }
+                                user.instagramUrl?.takeIf { it.isNotBlank() }?.let { Text("Instagram: $it") }
+                                user.websiteUrl?.takeIf { it.isNotBlank() }?.let { Text("Website: $it") }
+
+                                if (listOfNotNull(
+                                        user.linkedinUrl, user.twitterUrl, user.facebookUrl,
+                                        user.instagramUrl, user.websiteUrl
+                                    ).all { it.isNullOrBlank() }) {
+                                    Text("No social links added")
+                                }
                             }
                         }
                     }
@@ -133,11 +196,18 @@ fun UserProfileScreen(
 }
 
 @Composable
-private fun ProfileSection(title: String, content: @Composable () -> Unit) {
+private fun ProfileSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
         Spacer(modifier = Modifier.height(8.dp))
         content()
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

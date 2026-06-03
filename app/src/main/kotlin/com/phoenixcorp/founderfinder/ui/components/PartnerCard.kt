@@ -1,4 +1,4 @@
-package com.phoenixcorp.founderfinder.ui.screens
+package com.phoenixcorp.founderfinder.ui.components
 
 import android.util.Log
 import android.widget.Toast

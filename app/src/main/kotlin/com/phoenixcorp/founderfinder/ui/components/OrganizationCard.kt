@@ -63,7 +63,7 @@ fun OrganizationCard(
                     .document(orgId)
                     .get()
                     .await()
-                fetchedOrganization = doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
+                fetchedOrganization = doc.toObject(Organization::class.java)?.copy(id = doc.id)
                 isLoading = false
             } catch (e: Exception) {
                 errorMessage = "Failed to load organization: ${e.message}"
@@ -86,7 +86,7 @@ fun OrganizationCard(
                 }
             } else Modifier)
             .clickable(enabled = onSwipe == null) {
-                val id = currentOrg?.orgId ?: orgId ?: return@clickable
+                val id = currentOrg?.id ?: orgId ?: return@clickable
                 navController.navigate("organization_details/$id/$invitationId")
             },
         elevation = CardDefaults.cardElevation(defaultElevation = if (onSwipe != null) 8.dp else 4.dp)
@@ -117,7 +117,7 @@ fun OrganizationCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    navController.navigate("organization_details/${currentOrg.orgId}/")
+                                    navController.navigate("organization_details/${currentOrg.id}/")
                                 },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center

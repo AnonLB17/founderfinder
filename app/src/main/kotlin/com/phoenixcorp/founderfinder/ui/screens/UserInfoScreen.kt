@@ -14,23 +14,22 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import com.phoenixcorp.founderfinder.ui.viewmodel.UserInfoViewModel
 
 @Composable
 fun UserInfoScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    userInfoViewModel: UserInfoViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()   // For getting current user
 ) {
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var birthDate by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val firstName by userInfoViewModel.firstName.collectAsState()
+    val lastName by userInfoViewModel.lastName.collectAsState()
+    val birthDate by userInfoViewModel.birthDate.collectAsState()
+    val isLoading by userInfoViewModel.isLoading.collectAsState()
+    val errorMessage by userInfoViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Get current user ID safely
-    val currentUser = authViewModel.getCurrentUser() // We'll add this method
-    val userId = currentUser?.uid
+    val currentUser = authViewModel.getCurrentUser()
 
     Column(
         modifier = Modifier
@@ -47,7 +46,7 @@ fun UserInfoScreen(
 
         OutlinedTextField(
             value = firstName,
-            onValueChange = { firstName = it },
+            onValueChange = { userInfoViewModel.updateFirstName(it) },
             label = { Text("First Name") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -57,7 +56,7 @@ fun UserInfoScreen(
 
         OutlinedTextField(
             value = lastName,
-            onValueChange = { lastName = it },
+            onValueChange = { userInfoViewModel.updateLastName(it) },
             label = { Text("Last Name") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -67,56 +66,33 @@ fun UserInfoScreen(
 
         OutlinedTextField(
             value = birthDate,
-            onValueChange = { birthDate = it },
+            onValueChange = { userInfoViewModel.updateBirthDate(it) },
             label = { Text("Birth Date (MM/DD/YYYY)") },
+            placeholder = { Text("05/15/1995") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
-            singleLine = true,
-            placeholder = { Text("05/15/1995") }
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         errorMessage?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text(text = it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
         }
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in to continue."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                if (firstName.isBlank() || lastName.isBlank() || birthDate.isBlank()) {
-                    errorMessage = "Please fill in all fields."
-                    return@Button
-                }
 
-                // Birth date format validation
-                val birthDatePattern = Regex("^\\d{2}/\\d{2}/\\d{4}$")
-                if (!birthDate.matches(birthDatePattern)) {
-                    errorMessage = "Birth date must be in MM/DD/YYYY format."
-                    return@Button
-                }
-
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveUserInfo(userId, firstName, lastName, birthDate) { success ->
-                    isLoading = false
+                userInfoViewModel.saveUserInfo(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.Education.route) {
                             popUpTo(Screen.UserInfo.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save information. Please try again."
-                        Toast.makeText(context, "Failed to save user info", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -124,13 +100,16 @@ fun UserInfoScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }
         }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun UserInfoScreenPreview() {
+    UserInfoScreen(navController = rememberNavController())
 }

@@ -14,24 +14,23 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import com.phoenixcorp.founderfinder.ui.viewmodel.EducationViewModel
 
 @Composable
 fun EducationScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    educationViewModel: EducationViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    var highestEducation by remember { mutableStateOf("") }
-    var institution by remember { mutableStateOf("") }
-    var areaOfStudy by remember { mutableStateOf("") }
-    var educationEntries by remember { mutableStateOf(listOf<String>()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val highestEducation by educationViewModel.highestEducation.collectAsState()
+    val areaOfStudy by educationViewModel.areaOfStudy.collectAsState()
+    val institution by educationViewModel.institution.collectAsState()
+    val educationEntries by educationViewModel.educationEntries.collectAsState()
+    val isLoading by educationViewModel.isLoading.collectAsState()
+    val errorMessage by educationViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Get user from ViewModel instead of direct Firebase call
     val currentUser = authViewModel.getCurrentUser()
-    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -48,7 +47,7 @@ fun EducationScreen(
 
         OutlinedTextField(
             value = highestEducation,
-            onValueChange = { highestEducation = it },
+            onValueChange = { educationViewModel.updateHighestEducation(it) },
             label = { Text("Highest Level of Education") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -58,7 +57,7 @@ fun EducationScreen(
 
         OutlinedTextField(
             value = areaOfStudy,
-            onValueChange = { areaOfStudy = it },
+            onValueChange = { educationViewModel.updateAreaOfStudy(it) },
             label = { Text("Area of Study / Major") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -68,7 +67,7 @@ fun EducationScreen(
 
         OutlinedTextField(
             value = institution,
-            onValueChange = { institution = it },
+            onValueChange = { educationViewModel.updateInstitution(it) },
             label = { Text("Institution Name") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -78,16 +77,7 @@ fun EducationScreen(
 
         Button(
             onClick = {
-                if (highestEducation.isBlank() || areaOfStudy.isBlank() || institution.isBlank()) {
-                    errorMessage = "Please fill in all education fields."
-                    return@Button
-                }
-                val entry = "$highestEducation in $areaOfStudy from $institution"
-                educationEntries = educationEntries + entry
-                highestEducation = ""
-                areaOfStudy = ""
-                institution = ""
-                errorMessage = null
+                educationViewModel.addEducationEntry()
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
@@ -120,28 +110,16 @@ fun EducationScreen(
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                if (educationEntries.isEmpty()) {
-                    errorMessage = "Please add at least one education entry."
-                    return@Button
-                }
 
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveEducation(userId, educationEntries) { success ->
-                    isLoading = false
+                educationViewModel.saveEducation(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.WorkExperience.route) {
                             popUpTo(Screen.Education.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save education details. Please try again."
-                        Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -149,10 +127,7 @@ fun EducationScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }

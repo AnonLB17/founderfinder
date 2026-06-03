@@ -14,22 +14,21 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import com.phoenixcorp.founderfinder.ui.viewmodel.IndustriesOfInterestViewModel
 
 @Composable
 fun IndustriesOfInterestScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    industriesViewModel: IndustriesOfInterestViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    var keyword by remember { mutableStateOf("") }
-    var industries by remember { mutableStateOf(listOf<String>()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val keyword by industriesViewModel.keyword.collectAsState()
+    val industries by industriesViewModel.industries.collectAsState()
+    val isLoading by industriesViewModel.isLoading.collectAsState()
+    val errorMessage by industriesViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Use ViewModel instead of direct Firebase call
     val currentUser = authViewModel.getCurrentUser()
-    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -45,7 +44,7 @@ fun IndustriesOfInterestScreen(
 
         OutlinedTextField(
             value = keyword,
-            onValueChange = { keyword = it },
+            onValueChange = { industriesViewModel.updateKeyword(it) },
             label = { Text("Search Industry") },
             placeholder = { Text("e.g. FinTech, AI, HealthTech") },
             modifier = Modifier.fillMaxWidth(),
@@ -56,18 +55,7 @@ fun IndustriesOfInterestScreen(
 
         Button(
             onClick = {
-                if (keyword.isBlank()) {
-                    errorMessage = "Please enter an industry."
-                    return@Button
-                }
-                val trimmed = keyword.trim()
-                if (industries.contains(trimmed)) {
-                    errorMessage = "This industry is already added."
-                    return@Button
-                }
-                industries = industries + trimmed
-                keyword = ""
-                errorMessage = null
+                industriesViewModel.addIndustry()
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
@@ -100,28 +88,16 @@ fun IndustriesOfInterestScreen(
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                if (industries.isEmpty()) {
-                    errorMessage = "Please add at least one industry."
-                    return@Button
-                }
 
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveIndustriesOfInterest(userId, industries) { success ->
-                    isLoading = false
+                industriesViewModel.saveIndustries(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.OrganizationsOfInterest.route) {
                             popUpTo(Screen.IndustriesOfInterest.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save industries. Please try again."
-                        Toast.makeText(context, "Failed to save industries", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -129,10 +105,7 @@ fun IndustriesOfInterestScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }

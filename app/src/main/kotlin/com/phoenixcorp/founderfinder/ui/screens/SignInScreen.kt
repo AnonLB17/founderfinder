@@ -12,7 +12,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
@@ -21,12 +21,13 @@ import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 @Composable
 fun SignInScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = hiltViewModel()   // Changed to hiltViewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
     Column(
@@ -75,7 +76,8 @@ fun SignInScreen(
                 isLoading = true
                 errorMessage = null
 
-                authViewModel.signInUser(email, password) { success, message ->
+                // Fixed: Explicit parameter types
+                authViewModel.signInUser(email, password) { success: Boolean, message: String? ->
                     isLoading = false
                     if (success) {
                         navController.navigate(Screen.Home.route) {

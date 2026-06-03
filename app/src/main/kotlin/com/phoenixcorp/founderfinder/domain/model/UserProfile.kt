@@ -1,54 +1,51 @@
+// domain/model/UserProfile.kt
 package com.phoenixcorp.founderfinder.domain.model
 
-import com.google.firebase.firestore.IgnoreExtraProperties
-
-@IgnoreExtraProperties
 data class UserProfile(
-    val userId: String? = null,
+    val userId: String = "",
+    val email: String? = null,
+
+    // Basic Info
     val firstName: String? = null,
     val lastName: String? = null,
-    val bio: String? = null,
-    val profilePicture: String? = null,
-    val twitter: String? = null,
-    val linkedin: String? = null,
-    val facebook: String? = null,
-    val instagram: String? = null,
+    val birthDate: String? = null,           // MM/DD/YYYY
+
+    // Education
+    val educationEntries: List<String> = emptyList(),
+
+    // Work Experience
+    val workExperiences: List<String> = emptyList(),
+
+    // Founder Status
+    val isFounder: Boolean = false,
+    val founderEntries: List<String> = emptyList(),
+
+    // Ambition
     val ambitionStatement: String? = null,
-    val founderStatus: Boolean? = false,
-    val founderEntries: List<String>? = emptyList(),
-    val educationEntries: List<String>? = emptyList(),
-    val workExperiences: List<String>? = emptyList(),
-    val industries: List<String>? = emptyList(),
-    val organizations: List<String>? = emptyList(),
-    val hasInvestorProfile: Boolean? = false,
-    val investmentFirmName: String? = null,
-    val firmLogo: String? = null,
-    val professionalBackground: String? = null,
-    val notableAchievements: String? = null,
-    val preferredIndustries: List<String>? = emptyList(),
-    val investmentStage: String? = null,
-    val investmentRangeMin: String? = null,
-    val investmentRangeMax: String? = null,
-    val investmentApproach: String? = null,
-    val strategicInvolvement: String? = null,
-    val roiExpectations: String? = null,
-    val portfolioCompanies: List<String>? = emptyList(),
-    val successStories: List<String>? = emptyList(),
-    val testimonials: List<String>? = emptyList(),
-    val equityTerms: String? = null,
-    val boardRole: String? = null,
-    val returnTimeline: String? = null,
-    val expertise: String? = null,
-    val advisor: Boolean? = null,
-    val email: String? = null,
-    val experienceYears: Int? = null,
-    val partner: Boolean? = null
+
+    // Socials (matching Firestore field names)
+    val linkedinUrl: String? = null,
+    val twitterUrl: String? = null,
+    val facebookUrl: String? = null,
+    val instagramUrl: String? = null,
+    val websiteUrl: String? = null,
+
+    // Interests (matching Firestore field names)
+    val industriesOfInterest: List<String> = emptyList(),
+    val organizationsOfInterest: List<String> = emptyList(),
+
+    // Public Appearance
+    val profilePicture: String? = null,
+
+    // Timestamps
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
 // ====================== MAPPINGS ======================
 
 /**
- * Convert UserProfile to domain.model.User
+ * Convert UserProfile to domain.model.User (if you have a separate User class)
  */
 fun UserProfile.toUser(): User {
     val fullName = listOfNotNull(firstName, lastName)
@@ -56,14 +53,14 @@ fun UserProfile.toUser(): User {
         .ifBlank { "Unknown User" }
 
     return User(
-        uid = this.userId ?: "",
+        uid = this.userId,
         name = fullName,
         email = this.email,
-        school = null,                    // Not stored in UserProfile yet
-        bio = this.bio,
+        school = null,
+        bio = this.ambitionStatement,
         profileImageUrl = this.profilePicture,
-        role = UserRole.FOUNDER, // Default - adjust as needed
-        interests = this.industries ?: emptyList(),
+        role = UserRole.FOUNDER,
+        interests = this.industriesOfInterest,
         isVerified = false
     )
 }
@@ -78,8 +75,9 @@ fun User.toUserProfile(): UserProfile {
         firstName = nameParts.firstOrNull(),
         lastName = if (nameParts.size > 1) nameParts.drop(1).joinToString(" ") else null,
         email = this.email,
-        bio = this.bio,
+        ambitionStatement = this.bio,
         profilePicture = this.profileImageUrl,
-        industries = this.interests
+        industriesOfInterest = this.interests
+        // Other fields remain default for now
     )
 }

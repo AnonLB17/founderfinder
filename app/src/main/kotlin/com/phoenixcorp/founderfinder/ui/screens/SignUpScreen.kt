@@ -21,13 +21,14 @@ import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 @Composable
 fun SignUpScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← CHANGED HERE
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
 
     Column(
@@ -99,7 +100,8 @@ fun SignUpScreen(
                 isLoading = true
                 errorMessage = null
 
-                authViewModel.registerUser(email, password) { success, message ->
+                // Fixed: Explicit callback type
+                authViewModel.registerUser(email, password) { success: Boolean, message: String? ->
                     isLoading = false
                     if (success) {
                         navController.navigate(Screen.SelectUserType.route) {
@@ -107,7 +109,11 @@ fun SignUpScreen(
                         }
                     } else {
                         errorMessage = message ?: "An unknown error occurred."
-                        Toast.makeText(context, message ?: "Sign up failed", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            message ?: "Sign up failed",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             },

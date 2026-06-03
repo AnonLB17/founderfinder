@@ -110,7 +110,7 @@ fun InvestorSearchScreen(navController: NavHostController) {
                     .await()
                 organizations = snapshot.documents.mapNotNull { doc ->
                     try {
-                        doc.toObject(Organization::class.java)?.copy(orgId = doc.id)
+                        doc.toObject(Organization::class.java)?.copy(id = doc.id)
                     } catch (e: Exception) {
                         Log.e("InvestorSearchScreen", "Error parsing organization ${doc.id}: ${e.message}", e)
                         null

@@ -14,25 +14,24 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import com.phoenixcorp.founderfinder.ui.viewmodel.ConnectSocialsViewModel
 
 @Composable
 fun ConnectSocialsScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    socialsViewModel: ConnectSocialsViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    var linkedin by remember { mutableStateOf("") }
-    var twitter by remember { mutableStateOf("") }
-    var facebook by remember { mutableStateOf("") }
-    var instagram by remember { mutableStateOf("") }
-    var website by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val linkedin by socialsViewModel.linkedin.collectAsState()
+    val twitter by socialsViewModel.twitter.collectAsState()
+    val facebook by socialsViewModel.facebook.collectAsState()
+    val instagram by socialsViewModel.instagram.collectAsState()
+    val website by socialsViewModel.website.collectAsState()
+    val isLoading by socialsViewModel.isLoading.collectAsState()
+    val errorMessage by socialsViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Use ViewModel instead of direct Firebase call
     val currentUser = authViewModel.getCurrentUser()
-    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -49,7 +48,7 @@ fun ConnectSocialsScreen(
 
         OutlinedTextField(
             value = linkedin,
-            onValueChange = { linkedin = it },
+            onValueChange = { socialsViewModel.updateLinkedin(it) },
             label = { Text("LinkedIn Profile URL") },
             placeholder = { Text("https://linkedin.com/in/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
@@ -60,7 +59,7 @@ fun ConnectSocialsScreen(
 
         OutlinedTextField(
             value = twitter,
-            onValueChange = { twitter = it },
+            onValueChange = { socialsViewModel.updateTwitter(it) },
             label = { Text("Twitter / X Profile URL") },
             placeholder = { Text("https://twitter.com/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
@@ -71,7 +70,7 @@ fun ConnectSocialsScreen(
 
         OutlinedTextField(
             value = facebook,
-            onValueChange = { facebook = it },
+            onValueChange = { socialsViewModel.updateFacebook(it) },
             label = { Text("Facebook Profile URL") },
             placeholder = { Text("https://facebook.com/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
@@ -82,7 +81,7 @@ fun ConnectSocialsScreen(
 
         OutlinedTextField(
             value = instagram,
-            onValueChange = { instagram = it },
+            onValueChange = { socialsViewModel.updateInstagram(it) },
             label = { Text("Instagram Profile URL") },
             placeholder = { Text("https://instagram.com/yourprofile") },
             modifier = Modifier.fillMaxWidth(),
@@ -93,7 +92,7 @@ fun ConnectSocialsScreen(
 
         OutlinedTextField(
             value = website,
-            onValueChange = { website = it },
+            onValueChange = { socialsViewModel.updateWebsite(it) },
             label = { Text("Personal Website or Portfolio") },
             placeholder = { Text("https://yourwebsite.com") },
             modifier = Modifier.fillMaxWidth(),
@@ -113,31 +112,16 @@ fun ConnectSocialsScreen(
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
 
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveSocials(
-                    userId = userId,
-                    linkedin = linkedin.trim(),
-                    twitter = twitter.trim(),
-                    facebook = facebook.trim(),
-                    instagram = instagram.trim(),
-                    website = website.trim()
-                ) { success ->
-                    isLoading = false
+                socialsViewModel.saveSocials(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.IndustriesOfInterest.route) {
                             popUpTo(Screen.ConnectSocials.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save social links. Please try again."
-                        Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -145,10 +129,7 @@ fun ConnectSocialsScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }

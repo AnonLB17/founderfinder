@@ -84,7 +84,7 @@ fun OrganizationDetailsScreen(
                 isLoading = false
                 return@LaunchedEffect
             }
-            organization = orgDoc.toObject(Organization::class.java)?.copy(orgId = orgDoc.id)
+            organization = orgDoc.toObject(Organization::class.java)?.copy(id = orgDoc.id)
             Log.d("OrganizationDetailsScreen", "Organization data: ${orgDoc.data}")
 
             // Fetch files

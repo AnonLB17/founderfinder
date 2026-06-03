@@ -16,24 +16,23 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import com.phoenixcorp.founderfinder.ui.viewmodel.WorkExperienceViewModel
 
 @Composable
 fun WorkExperienceScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    workExperienceViewModel: WorkExperienceViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    var jobTitle by remember { mutableStateOf("") }
-    var company by remember { mutableStateOf("") }
-    var yearsOfExperience by remember { mutableStateOf("") }
-    var workExperiences by remember { mutableStateOf(listOf<String>()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val jobTitle by workExperienceViewModel.jobTitle.collectAsState()
+    val company by workExperienceViewModel.company.collectAsState()
+    val yearsOfExperience by workExperienceViewModel.yearsOfExperience.collectAsState()
+    val workExperiences by workExperienceViewModel.workExperiences.collectAsState()
+    val isLoading by workExperienceViewModel.isLoading.collectAsState()
+    val errorMessage by workExperienceViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Use ViewModel instead of direct Firebase call
     val currentUser = authViewModel.getCurrentUser()
-    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -50,7 +49,7 @@ fun WorkExperienceScreen(
 
         OutlinedTextField(
             value = jobTitle,
-            onValueChange = { jobTitle = it },
+            onValueChange = { workExperienceViewModel.updateJobTitle(it) },
             label = { Text("Job Title") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -60,7 +59,7 @@ fun WorkExperienceScreen(
 
         OutlinedTextField(
             value = company,
-            onValueChange = { company = it },
+            onValueChange = { workExperienceViewModel.updateCompany(it) },
             label = { Text("Company Name") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
@@ -70,7 +69,7 @@ fun WorkExperienceScreen(
 
         OutlinedTextField(
             value = yearsOfExperience,
-            onValueChange = { yearsOfExperience = it },
+            onValueChange = { workExperienceViewModel.updateYearsOfExperience(it) },
             label = { Text("Years of Experience") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
@@ -81,23 +80,7 @@ fun WorkExperienceScreen(
 
         Button(
             onClick = {
-                if (jobTitle.isBlank() || company.isBlank() || yearsOfExperience.isBlank()) {
-                    errorMessage = "Please fill in all work experience fields."
-                    return@Button
-                }
-                val years = yearsOfExperience.toIntOrNull()
-                if (years == null || years < 0) {
-                    errorMessage = "Years of experience must be a valid non-negative number."
-                    return@Button
-                }
-
-                val entry = "$jobTitle at $company ($years years)"
-                workExperiences = workExperiences + entry
-
-                jobTitle = ""
-                company = ""
-                yearsOfExperience = ""
-                errorMessage = null
+                workExperienceViewModel.addWorkExperience()
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
@@ -130,28 +113,16 @@ fun WorkExperienceScreen(
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                if (workExperiences.isEmpty()) {
-                    errorMessage = "Please add at least one work experience."
-                    return@Button
-                }
 
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveWorkExperience(userId, workExperiences) { success ->
-                    isLoading = false
+                workExperienceViewModel.saveWorkExperience(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.FounderStatus.route) {
                             popUpTo(Screen.WorkExperience.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save work experience. Please try again."
-                        Toast.makeText(context, "Failed to save work experience", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -159,10 +130,7 @@ fun WorkExperienceScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }

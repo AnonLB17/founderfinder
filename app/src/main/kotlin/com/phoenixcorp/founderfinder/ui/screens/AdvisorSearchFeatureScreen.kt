@@ -17,7 +17,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
-import com.phoenixcorp.founderfinder.ui.components.AdvisorCard   // ← Fixed import
+import com.phoenixcorp.founderfinder.ui.components.AdvisorCard
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch
@@ -31,43 +31,55 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
-    var refreshTrigger by remember { mutableStateOf(0) }
 
     // Real-time Firestore listener
     DisposableEffect(Unit) {
         Log.d("AdvisorSearch", "Setting up Firestore listener for advisors")
+
         val listener = firestore.collection("profiles")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     errorMessage = "Failed to load advisors: ${error.message}"
-                    Log.e("AdvisorSearch", "Snapshot error: ${error.message}", error)
+                    Log.e("AdvisorSearch", "Snapshot error", error)
                     isLoading = false
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
-                    Log.d("AdvisorSearch", "Snapshot received: ${snapshot.documents.size} documents")
                     coroutineScope.launch {
                         val advisorList = mutableListOf<UserProfile>()
                         for (doc in snapshot.documents) {
                             try {
-                                val advisorDoc = firestore.collection("profiles")
-                                    .document(doc.id)
-                                    .collection("advisor")
-                                    .document("data")
-                                    .get()
-                                    .await()
+                                val baseProfile = doc.toObject(UserProfile::class.java)
+                                    ?: continue
 
-                                if (advisorDoc.exists()) {
-                                    val baseProfile = doc.toObject(UserProfile::class.java)
-                                    val advisor = baseProfile?.copy(
-                                        expertise = advisorDoc.getString("expertise"),
-                                        experienceYears = advisorDoc.getLong("experienceYears")?.toInt()
-                                    )
-                                    advisor?.let { advisorList.add(it) }
+                                // Try to fetch additional advisor-specific data (if exists)
+                                val advisorDoc = try {
+                                    firestore.collection("profiles")
+                                        .document(doc.id)
+                                        .collection("advisor")
+                                        .document("data")
+                                        .get()
+                                        .await()
+                                } catch (e: Exception) {
+                                    null
                                 }
+
+                                val advisorProfile = if (advisorDoc?.exists() == true) {
+                                    baseProfile.copy(
+                                        // Add advisor-specific fields safely using copy with defaults
+                                        isFounder = baseProfile.isFounder,
+                                        // You can extend UserProfile later with expertise, etc.
+                                        ambitionStatement = advisorDoc.getString("expertise")
+                                            ?: baseProfile.ambitionStatement
+                                    )
+                                } else {
+                                    baseProfile
+                                }
+
+                                advisorList.add(advisorProfile)
                             } catch (e: Exception) {
-                                Log.e("AdvisorSearch", "Error parsing advisor ${doc.id}: ${e.message}", e)
+                                Log.e("AdvisorSearch", "Error parsing advisor ${doc.id}", e)
                             }
                         }
                         advisors = advisorList
@@ -113,11 +125,11 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                     label = { Text("Search Advisors") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { /* handled by state */ }),
+                    keyboardActions = KeyboardActions(onSearch = { }),
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { /* Search is live via state */ }) {
+                Button(onClick = { /* Live filtering */ }) {
                     Text("Search")
                 }
             }
@@ -153,7 +165,8 @@ fun AdvisorSearchFeatureScreen(navController: NavHostController) {
                     LazyColumn {
                         val filteredAdvisors = advisors.filter { advisor ->
                             advisor.firstName?.contains(searchQuery, ignoreCase = true) == true ||
-                                    advisor.lastName?.contains(searchQuery, ignoreCase = true) == true
+                                    advisor.lastName?.contains(searchQuery, ignoreCase = true) == true ||
+                                    advisor.ambitionStatement?.contains(searchQuery, ignoreCase = true) == true
                         }
                         items(filteredAdvisors) { advisor ->
                             AdvisorCard(

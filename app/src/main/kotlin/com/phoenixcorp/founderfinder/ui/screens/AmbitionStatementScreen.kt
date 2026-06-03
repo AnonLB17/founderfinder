@@ -13,22 +13,21 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.viewmodel.AmbitionStatementViewModel
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
 
 @Composable
 fun AmbitionStatementScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    ambitionViewModel: AmbitionStatementViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    var ambitionStatement by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val ambitionStatement by ambitionViewModel.ambitionStatement.collectAsState()
+    val isLoading by ambitionViewModel.isLoading.collectAsState()
+    val errorMessage by ambitionViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Use ViewModel instead of direct Firebase call
     val currentUser = authViewModel.getCurrentUser()
-    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -45,7 +44,7 @@ fun AmbitionStatementScreen(
 
         OutlinedTextField(
             value = ambitionStatement,
-            onValueChange = { ambitionStatement = it },
+            onValueChange = { ambitionViewModel.updateAmbitionStatement(it) },
             label = { Text("Write about your ambition and goals") },
             placeholder = { Text("I want to build a platform that connects founders with advisors...") },
             modifier = Modifier.fillMaxWidth(),
@@ -66,32 +65,16 @@ fun AmbitionStatementScreen(
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
 
-                if (ambitionStatement.isBlank()) {
-                    errorMessage = "Please enter your ambition statement."
-                    return@Button
-                }
-
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveAmbitionStatement(
-                    userId = userId,
-                    ambitionStatement = ambitionStatement
-                ) { success ->
-                    isLoading = false
+                ambitionViewModel.saveAmbitionStatement(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.ConnectSocials.route) {
                             popUpTo(Screen.AmbitionStatement.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save ambition statement. Please try again."
-                        Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -99,10 +82,7 @@ fun AmbitionStatementScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }

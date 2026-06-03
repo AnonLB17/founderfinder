@@ -2,6 +2,7 @@ package com.phoenixcorp.founderfinder.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.phoenixcorp.founderfinder.domain.model.User
 import com.phoenixcorp.founderfinder.domain.model.UserRole
 import com.phoenixcorp.founderfinder.domain.repository.UserRepository
@@ -32,6 +33,32 @@ class UserRepositoryImpl @Inject constructor(
     override suspend fun updateUser(user: User): Result<Unit> {
         return try {
             usersCollection.document(user.uid).set(user).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * NEW: Dedicated method for onboarding completion
+     * Uses merge to avoid overwriting fields that might be set later
+     */
+    override suspend fun saveOnboardingData(user: User): Result<Unit> {
+        return try {
+            usersCollection.document(user.uid)
+                .set(user, SetOptions.merge())  // Important: merge instead of full overwrite
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateUserProfile(uid: String, updates: Map<String, Any>): Result<Unit> {
+        return try {
+            usersCollection.document(uid)
+                .set(updates, SetOptions.merge())
+                .await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

@@ -14,22 +14,21 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import com.phoenixcorp.founderfinder.ui.viewmodel.OrganizationsOfInterestViewModel
 
 @Composable
 fun OrganizationsOfInterestScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // ← Fixed: Use Hilt
+    organizationsViewModel: OrganizationsOfInterestViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    var keyword by remember { mutableStateOf("") }
-    var organizations by remember { mutableStateOf(listOf<String>()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val keyword by organizationsViewModel.keyword.collectAsState()
+    val organizations by organizationsViewModel.organizations.collectAsState()
+    val isLoading by organizationsViewModel.isLoading.collectAsState()
+    val errorMessage by organizationsViewModel.errorMessage.collectAsState()
 
     val context = LocalContext.current
-
-    // Use ViewModel instead of direct Firebase call
     val currentUser = authViewModel.getCurrentUser()
-    val userId = currentUser?.uid
 
     Column(
         modifier = Modifier
@@ -45,7 +44,7 @@ fun OrganizationsOfInterestScreen(
 
         OutlinedTextField(
             value = keyword,
-            onValueChange = { keyword = it },
+            onValueChange = { organizationsViewModel.updateKeyword(it) },
             label = { Text("Search Organization") },
             placeholder = { Text("e.g. Y Combinator, a16z, Google") },
             modifier = Modifier.fillMaxWidth(),
@@ -56,18 +55,7 @@ fun OrganizationsOfInterestScreen(
 
         Button(
             onClick = {
-                if (keyword.isBlank()) {
-                    errorMessage = "Please enter an organization."
-                    return@Button
-                }
-                val trimmed = keyword.trim()
-                if (organizations.contains(trimmed)) {
-                    errorMessage = "This organization is already added."
-                    return@Button
-                }
-                organizations = organizations + trimmed
-                keyword = ""
-                errorMessage = null
+                organizationsViewModel.addOrganization()
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
@@ -100,28 +88,16 @@ fun OrganizationsOfInterestScreen(
 
         Button(
             onClick = {
-                if (userId == null) {
-                    errorMessage = "You must be logged in."
+                if (currentUser == null) {
                     Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                if (organizations.isEmpty()) {
-                    errorMessage = "Please add at least one organization."
-                    return@Button
-                }
 
-                isLoading = true
-                errorMessage = null
-
-                authViewModel.saveOrganizationsOfInterest(userId, organizations) { success ->
-                    isLoading = false
+                organizationsViewModel.saveOrganizations(currentUser.uid) { success ->
                     if (success) {
                         navController.navigate(Screen.PublicAppearance.route) {
                             popUpTo(Screen.OrganizationsOfInterest.route) { inclusive = true }
                         }
-                    } else {
-                        errorMessage = "Failed to save organizations. Please try again."
-                        Toast.makeText(context, "Failed to save organizations", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -129,10 +105,7 @@ fun OrganizationsOfInterestScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Text("Next")
             }

@@ -78,7 +78,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
             organizations = snapshot.documents.mapNotNull { doc ->
                 try {
                     Organization(
-                        orgId = doc.id,
+                        id = doc.id,
                         name = doc.getString("name") ?: "",
                         description = doc.getString("description") ?: "",
                         imageUri = doc.getString("imageUri"),
@@ -252,26 +252,26 @@ fun IdeaCreationScreen(navController: NavHostController) {
                                     imageUri = storageRef.downloadUrl.await().toString()
                                 }
                                 val orgData = Organization(
-                                    orgId = selectedOrganization?.orgId ?: UUID.randomUUID().toString(),
+                                    id = selectedOrganization?.id ?: UUID.randomUUID().toString(),
                                     name = businessName,
                                     description = ideaDescription,
                                     imageUri = imageUri,
                                     creatorId = currentUser.uid
                                 )
                                 firestore.collection("organizations")
-                                    .document(orgData.orgId)
+                                    .document(orgData.id)
                                     .set(orgData)
                                     .await()
                                 organizations = if (selectedOrganization == null) {
                                     organizations + orgData
                                 } else {
-                                    organizations.map { if (it.orgId == orgData.orgId) orgData else it }
+                                    organizations.map { if (it.id == orgData.id) orgData else it }
                                 }
                                 selectedOrganization = orgData
                                 // Save selected orgId to SharedPreferences
                                 context.getSharedPreferences("founderfinder", Context.MODE_PRIVATE)
                                     .edit()
-                                    .putString("selectedOrgId", orgData.orgId)
+                                    .putString("selectedOrgId", orgData.id)
                                     .apply()
                                 isCreatingOrganization = false
                                 errorMessage = null
@@ -289,7 +289,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
                     if (selectedOrganization != null) {
-                        navController.navigate(Screen.OrganizationFiles.createRoute(selectedOrganization!!.orgId))
+                        navController.navigate(Screen.OrganizationFiles.createRoute(selectedOrganization!!.id))
                     } else {
                         errorMessage = "Please select or create an organization first."
                     }
