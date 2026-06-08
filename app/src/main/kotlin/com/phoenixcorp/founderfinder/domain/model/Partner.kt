@@ -4,8 +4,9 @@ data class Partner(
     val user: User,
     val partnershipType: List<PartnershipType> = emptyList(),
     val skills: List<String> = emptyList(),
-    val lookingFor: String? = null,           // e.g., "Co-founder", "CTO", etc.
-    val availability: Boolean = true
+    val lookingFor: String? = null,
+    val availability: Boolean = true,
+    val experienceYears: Int = 0   // ← Add this line
 )
 
 enum class PartnershipType {

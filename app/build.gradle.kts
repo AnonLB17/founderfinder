@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    id("org.jetbrains.kotlin.plugin.parcelize")
 }
 
 android {
@@ -15,8 +16,8 @@ android {
         applicationId = "com.phoenixcorp.founderfinder"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.1"
+        versionCode = 4
+        versionName = "1.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -1,6 +1,5 @@
 package com.phoenixcorp.founderfinder.ui.components
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -22,70 +21,31 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.domain.model.RoleProfile
-import com.phoenixcorp.founderfinder.domain.model.UserProfile
+import com.phoenixcorp.founderfinder.domain.model.Partner
 import com.phoenixcorp.founderfinder.navigation.Screen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @Composable
-fun PartnerCard(profile: UserProfile, navController: NavHostController) {
+fun PartnerCard(
+    profile: Partner,
+    navController: NavHostController
+) {
     val auth = Firebase.auth
     val firestore = Firebase.firestore
-    val coroutineScope = rememberCoroutineScope()
-    var partnerProfile by remember { mutableStateOf<RoleProfile?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
-    // Fetch partner-specific data
-    LaunchedEffect(profile.userId) {
-        if (profile.userId != null) {
-            try {
-                Log.d("PartnerCard", "Fetching partner profile from profiles/${profile.userId}/partner/data")
-                val partnerDoc = firestore.collection("profiles")
-                    .document(profile.userId!!)
-                    .collection("partner")
-                    .document("data")
-                    .get()
-                    .await()
-
-                if (partnerDoc.exists()) {
-                    partnerProfile = partnerDoc.toObject(RoleProfile::class.java)
-                    Log.d("PartnerCard", "Fetched partner profile: expertise=${partnerProfile?.expertise}, experienceYears=${partnerProfile?.experienceYears}")
-                } else {
-                    Log.w("PartnerCard", "No partner profile found for user ${profile.userId}")
-                }
-            } catch (e: Exception) {
-                Log.e("PartnerCard", "Error fetching partner profile: ${e.message}", e)
-            } finally {
-                isLoading = false
-            }
-        } else {
-            isLoading = false
-        }
-    }
+    val user = profile.user
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .clickable {
-                profile.userId?.let { userId ->
-                    coroutineScope.launch {
-                        try {
-                            val profileDoc = firestore.collection("profiles")
-                                .document(userId)
-                                .get()
-                                .await()
-                            if (profileDoc.exists()) {
-                                navController.navigate(Screen.UserProfile.createRoute(userId))
-                            } else {
-                                Toast.makeText(context, "User profile not found", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error checking profile: ${e.message}", Toast.LENGTH_SHORT).show()
-                            Log.e("PartnerCard", "Error checking profile", e)
-                        }
+                user.uid.let { userId ->
+                    if (userId.isNotBlank()) {
+                        navController.navigate(Screen.UserProfile.createRoute(userId))
                     }
                 }
             }
@@ -97,63 +57,71 @@ fun PartnerCard(profile: UserProfile, navController: NavHostController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Profile Picture
-            if (!profile.profilePicture.isNullOrEmpty()) {
-                Image(
-                    painter = rememberAsyncImagePainter(
-                        model = ImageRequest.Builder(context)
-                            .data(profile.profilePicture)
-                            .crossfade(true)
-                            .placeholder(R.drawable.ic_profile_placeholder)
-                            .error(R.drawable.ic_profile_placeholder)
-                            .build()
-                    ),
-                    contentDescription = "Profile Picture",
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_profile_placeholder),
-                    contentDescription = "Profile Picture",
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            }
+            Image(
+                painter = rememberAsyncImagePainter(
+                    model = ImageRequest.Builder(context)
+                        .data(user.profileImageUrl)
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_profile_placeholder)
+                        .error(R.drawable.ic_profile_placeholder)
+                        .build()
+                ),
+                contentDescription = "Profile Picture",
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Profile Details
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${profile.firstName ?: "Unknown"} ${profile.lastName ?: "User"}",
+                    text = user.name.ifBlank { "Partner" },
                     style = MaterialTheme.typography.titleMedium
                 )
 
-                if (isLoading) {
-                    Text(text = "Loading...", style = MaterialTheme.typography.bodyMedium)
+                // Skills / Expertise
+                if (profile.skills.isNotEmpty()) {
+                    Text(
+                        text = profile.skills.joinToString(", "),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 } else {
-                    partnerProfile?.expertise?.let { expertise ->
-                        Text(text = "Expertise: $expertise", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    partnerProfile?.experienceYears?.let { years ->
-                        Text(text = "Experience: $years years", style = MaterialTheme.typography.bodyMedium)
-                    }
+                    Text(
+                        text = "No skills listed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Years of Experience
+                if (profile.experienceYears > 0) {
+                    Text(
+                        text = "${profile.experienceYears} years experience",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                // Looking For
+                profile.lookingFor?.let {
+                    Text(
+                        text = "Looking for: $it",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
 
-            // Mail Icon
+            // Message Button
             IconButton(onClick = {
-                val currentUser = auth.currentUser
-                if (currentUser == null) {
+                val currentUser = auth.currentUser ?: run {
                     navController.navigate(Screen.SignIn.route)
                     return@IconButton
                 }
 
-                profile.userId?.let { recipientId ->
+                user.uid.let { recipientId ->
+                    if (recipientId.isBlank()) return@IconButton
+
                     coroutineScope.launch {
                         try {
                             val conversationId = if (currentUser.uid < recipientId) {
@@ -162,21 +130,19 @@ fun PartnerCard(profile: UserProfile, navController: NavHostController) {
                                 "${recipientId}_${currentUser.uid}"
                             }
 
-                            val conversationData = hashMapOf(
-                                "senderId" to currentUser.uid,
-                                "recipientId" to recipientId,
-                                "participantIds" to listOf(currentUser.uid, recipientId),
-                                "lastUpdated" to System.currentTimeMillis()
-                            )
-
                             firestore.collection("conversations")
                                 .document(conversationId)
-                                .set(conversationData, com.google.firebase.firestore.SetOptions.merge())
+                                .set(
+                                    mapOf(
+                                        "participantIds" to listOf(currentUser.uid, recipientId),
+                                        "lastUpdated" to System.currentTimeMillis()
+                                    ),
+                                    com.google.firebase.firestore.SetOptions.merge()
+                                )
                                 .await()
 
                             navController.navigate(Screen.PrivateChat.createRoute(conversationId))
                         } catch (e: Exception) {
-                            Log.e("PartnerCard", "Error creating conversation", e)
                             Toast.makeText(context, "Failed to start conversation", Toast.LENGTH_SHORT).show()
                         }
                     }

@@ -11,12 +11,12 @@ data class User(
     val role: UserRole = UserRole.FOUNDER,
 
     /** NEW: Added for onboarding */
-    val roleProfile: RoleProfile? = null,        // expertise + experience years
+    val roleProfile: RoleProfile? = null,
 
     val interests: List<String> = emptyList(),
 
     /** NEW: Helpful flags */
-    val isOnboarded: Boolean = false,            // True after completing onboarding
+    val isOnboarded: Boolean = false,
     val isVerified: Boolean = false,
 
     val createdAt: Long = System.currentTimeMillis(),
@@ -27,5 +27,6 @@ enum class UserRole {
     FOUNDER,
     INVESTOR,
     ADVISOR,
-    PARTNER
+    PARTNER,
+    ORGANIZATION
 }

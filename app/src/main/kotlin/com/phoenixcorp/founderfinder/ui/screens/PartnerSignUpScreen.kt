@@ -24,6 +24,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.storage
 import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.domain.model.RoleProfile
@@ -48,59 +49,44 @@ fun PartnerSignUpScreen(navController: NavHostController) {
     var profilePictureUrl by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var existingProfile by remember { mutableStateOf<UserProfile?>(null) }
-    var existingPartnerProfile by remember { mutableStateOf<RoleProfile?>(null) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        imageUri = uri
-    }
+    ) { uri: Uri? -> imageUri = uri }
 
-    // Fetch existing profile data
+    // Load existing data
     LaunchedEffect(Unit) {
-        val currentUser = auth.currentUser
-        if (currentUser != null) {
-            try {
-                // Fetch main user profile
-                val profileDoc = firestore.collection("profiles")
-                    .document(currentUser.uid)
-                    .get()
-                    .await()
-
-                if (profileDoc.exists()) {
-                    existingProfile = profileDoc.toObject(UserProfile::class.java)
-                    existingProfile?.let {
-                        firstName = TextFieldValue(it.firstName ?: "")
-                        lastName = TextFieldValue(it.lastName ?: "")
-                        profilePictureUrl = it.profilePicture
-                    }
+        val currentUser = auth.currentUser ?: return@LaunchedEffect
+        try {
+            val profileDoc = firestore.collection("profiles").document(currentUser.uid).get().await()
+            if (profileDoc.exists()) {
+                val profile = profileDoc.toObject(UserProfile::class.java)
+                profile?.let {
+                    firstName = TextFieldValue(it.firstName ?: "")
+                    lastName = TextFieldValue(it.lastName ?: "")
+                    profilePictureUrl = it.profilePicture
                 }
-
-                // Fetch partner-specific data
-                val partnerDoc = firestore.collection("profiles")
-                    .document(currentUser.uid)
-                    .collection("partner")
-                    .document("data")
-                    .get()
-                    .await()
-
-                if (partnerDoc.exists()) {
-                    existingPartnerProfile = partnerDoc.toObject(RoleProfile::class.java)
-                    existingPartnerProfile?.let {
-                        expertise = TextFieldValue(it.expertise ?: "")
-                        experienceYears = TextFieldValue(it.experienceYears?.toString() ?: "")
-                    }
-                }
-            } catch (e: Exception) {
-                errorMessage = "Failed to load profile: ${e.message}"
-                Log.e("PartnerSignUp", "Error loading profile", e)
             }
-        } else {
-            errorMessage = "You must be logged in."
+
+            val partnerDoc = firestore.collection("profiles")
+                .document(currentUser.uid)
+                .collection("partner")
+                .document("data")
+                .get()
+                .await()
+
+            if (partnerDoc.exists()) {
+                val partner = partnerDoc.toObject(RoleProfile::class.java)
+                partner?.let {
+                    expertise = TextFieldValue(it.expertise ?: "")
+                    experienceYears = TextFieldValue(it.experienceYears?.toString() ?: "")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PartnerSignUp", "Load error", e)
         }
     }
 
@@ -122,16 +108,10 @@ fun PartnerSignUpScreen(navController: NavHostController) {
                     .clip(CircleShape)
                     .clickable { imagePickerLauncher.launch("image/*") }
             ) {
-                if (imageUri != null) {
+                val imageToShow = imageUri ?: profilePictureUrl
+                if (imageToShow != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(imageUri),
-                        contentDescription = "Selected Image",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else if (!profilePictureUrl.isNullOrEmpty()) {
-                    Image(
-                        painter = rememberAsyncImagePainter(profilePictureUrl),
+                        painter = rememberAsyncImagePainter(imageToShow),
                         contentDescription = "Profile Picture",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -139,7 +119,7 @@ fun PartnerSignUpScreen(navController: NavHostController) {
                 } else {
                     Image(
                         painter = painterResource(id = R.drawable.ic_profile_placeholder),
-                        contentDescription = "Default Profile Picture",
+                        contentDescription = "Default",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -148,27 +128,21 @@ fun PartnerSignUpScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Input Fields
             PartnerInputField("First Name", firstName) { firstName = it }
             PartnerInputField("Last Name", lastName) { lastName = it }
-            PartnerInputField("Expertise", expertise) { expertise = it }
+            PartnerInputField("Expertise / Skills", expertise) { expertise = it }
             PartnerInputField("Years of Experience", experienceYears) { experienceYears = it }
 
             if (errorMessage != null) {
-                Text(
-                    text = errorMessage!!,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Submit Button
             Button(
                 onClick = {
-                    if (firstName.text.isBlank() || lastName.text.isBlank() || expertise.text.isBlank()) {
-                        errorMessage = "All fields are required."
+                    if (firstName.text.isBlank() || lastName.text.isBlank()) {
+                        errorMessage = "First and last name are required."
                         return@Button
                     }
 
@@ -177,7 +151,7 @@ fun PartnerSignUpScreen(navController: NavHostController) {
 
                     val currentUser = auth.currentUser
                     if (currentUser == null) {
-                        errorMessage = "You must be logged in."
+                        errorMessage = "Not logged in."
                         isLoading = false
                         return@Button
                     }
@@ -186,46 +160,44 @@ fun PartnerSignUpScreen(navController: NavHostController) {
                         try {
                             // Upload image if selected
                             val downloadUrl = if (imageUri != null) {
-                                val storageRef = storage.reference.child("profilePictures/${currentUser.uid}/profile.jpg")
-                                storageRef.putFile(imageUri!!).await()
-                                storageRef.downloadUrl.await().toString()
-                            } else {
-                                profilePictureUrl ?: ""
-                            }
+                                val ref = storage.reference.child("profilePictures/${currentUser.uid}/profile.jpg")
+                                ref.putFile(imageUri!!).await()
+                                ref.downloadUrl.await().toString()
+                            } else profilePictureUrl
 
-                            // Save User Profile
-                            val userProfile = UserProfile(
-                                userId = currentUser.uid,
-                                firstName = firstName.text,
-                                lastName = lastName.text,
-                                profilePicture = downloadUrl
+                            // Update main profile - USE MERGE to prevent data loss
+                            val updates = mapOf<String, Any?>(
+                                "firstName" to firstName.text,
+                                "lastName" to lastName.text,
+                                "profilePicture" to downloadUrl
                             )
 
                             firestore.collection("profiles")
                                 .document(currentUser.uid)
-                                .set(userProfile)
+                                .set(updates, SetOptions.merge())
                                 .await()
 
-                            // Save Partner Profile
-                            val partnerProfile = RoleProfile(
-                                expertise = expertise.text,
-                                experienceYears = experienceYears.text.toIntOrNull() ?: 0
+                            // Save Partner data in subcollection
+                            val partnerData = mapOf<String, Any>(
+                                "expertise" to expertise.text,
+                                "experienceYears" to (experienceYears.text.toIntOrNull() ?: 0)
                             )
 
                             firestore.collection("profiles")
                                 .document(currentUser.uid)
                                 .collection("partner")
                                 .document("data")
-                                .set(partnerProfile)
+                                .set(partnerData, SetOptions.merge())
                                 .await()
 
-                            Toast.makeText(context, "Partner profile created successfully!", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Partner profile saved successfully!", Toast.LENGTH_LONG).show()
+
                             navController.navigate(Screen.PartnerSearchFeature.route) {
                                 popUpTo(Screen.PartnerSignUp.route) { inclusive = true }
                             }
                         } catch (e: Exception) {
-                            errorMessage = "Failed to save profile: ${e.message}"
-                            Log.e("PartnerSignUp", "Save error", e)
+                            errorMessage = "Save failed: ${e.message}"
+                            Log.e("PartnerSignUp", "Error", e)
                         } finally {
                             isLoading = false
                         }
@@ -237,7 +209,7 @@ fun PartnerSignUpScreen(navController: NavHostController) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Text("Sign Up")
+                    Text("Submit Partner Profile")
                 }
             }
         }

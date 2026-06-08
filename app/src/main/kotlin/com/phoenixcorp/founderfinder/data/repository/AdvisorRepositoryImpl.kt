@@ -1,8 +1,9 @@
 package com.phoenixcorp.founderfinder.data.repository
 
+import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.phoenixcorp.founderfinder.domain.model.Advisor
+import com.phoenixcorp.founderfinder.domain.model.User
 import com.phoenixcorp.founderfinder.domain.repository.AdvisorRepository
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -11,7 +12,7 @@ class AdvisorRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore
 ) : AdvisorRepository {
 
-    private val advisorsCollection = firestore.collection("advisors")
+    private val profilesCollection = firestore.collection("profiles")
 
     override suspend fun searchAdvisors(
         query: String,
@@ -19,51 +20,140 @@ class AdvisorRepositoryImpl @Inject constructor(
         expertise: List<String>?
     ): List<Advisor> {
         return try {
-            var queryRef: Query = advisorsCollection
+            val snapshot = profilesCollection.get().await()
+            val advisors = mutableListOf<Advisor>()
 
-            // Filter by school if provided
-            if (school != null) {
-                queryRef = queryRef.whereEqualTo("user.school", school)
+            for (doc in snapshot.documents) {
+                val advisorDataDoc = profilesCollection
+                    .document(doc.id)
+                    .collection("advisor")
+                    .document("data")
+                    .get()
+                    .await()
+
+                if (advisorDataDoc.exists()) {
+                    val data = doc.data ?: continue
+
+                    // Build full name from Firestore data
+                    val firstName = data["firstName"] as? String ?: ""
+                    val lastName = data["lastName"] as? String ?: ""
+                    val fullName = listOfNotNull(firstName.ifBlank { null }, lastName.ifBlank { null })
+                        .joinToString(" ")
+                        .ifBlank { (data["name"] as? String) ?: "Advisor" }
+
+                    val user = doc.toObject(User::class.java)?.copy(
+                        uid = doc.id,
+                        name = fullName
+                    ) ?: User(uid = doc.id, name = fullName)
+
+                    // Handle expertise (String or List)
+                    val expertiseList = when (val exp = advisorDataDoc.get("expertise")) {
+                        is List<*> -> exp.filterIsInstance<String>()
+                        is String -> exp.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                        else -> emptyList()
+                    }
+
+                    val advisor = Advisor(
+                        user = user,
+                        expertise = expertiseList,
+                        experienceYears = (advisorDataDoc.getLong("experienceYears") ?: 0L).toInt(),
+                        rating = 4.5f,
+                        reviewCount = 0,
+                        availability = true,
+                        hourlyRate = null,
+                        linkedinUrl = null,
+                        company = null,
+                        title = null
+                    )
+                    advisors.add(advisor)
+                }
             }
 
-            // You can add more filters here later
-            // Example:
-            // if (!expertise.isNullOrEmpty()) {
-            //     queryRef = queryRef.whereArrayContainsAny("expertise", expertise)
-            // }
+            // Client-side filtering
+            val q = query.lowercase().trim()
+            if (q.isBlank()) advisors else advisors.filter { advisor ->
+                advisor.user.name.lowercase().contains(q) ||
+                        advisor.expertise.any { it.lowercase().contains(q) }
+            }
 
-            queryRef.get().await().toObjects(Advisor::class.java)
         } catch (e: Exception) {
+            Log.e("AdvisorRepository", "Search error", e)
             emptyList()
         }
     }
 
     override suspend fun getAdvisorById(uid: String): Advisor? {
         return try {
-            advisorsCollection.document(uid).get().await()
-                .toObject(Advisor::class.java)
+            val userDoc = profilesCollection.document(uid).get().await()
+            val data = userDoc.data ?: return null
+
+            val firstName = data["firstName"] as? String ?: ""
+            val lastName = data["lastName"] as? String ?: ""
+            val fullName = listOfNotNull(firstName.ifBlank { null }, lastName.ifBlank { null })
+                .joinToString(" ")
+                .ifBlank { (data["name"] as? String) ?: "Advisor" }
+
+            val user = userDoc.toObject(User::class.java)?.copy(
+                uid = uid,
+                name = fullName
+            ) ?: User(uid = uid, name = fullName)
+
+            val advisorData = profilesCollection.document(uid)
+                .collection("advisor")
+                .document("data")
+                .get()
+                .await()
+
+            val expertiseList = when (val exp = advisorData.get("expertise")) {
+                is List<*> -> exp.filterIsInstance<String>()
+                is String -> exp.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                else -> emptyList()
+            }
+
+            Advisor(
+                user = user,
+                expertise = expertiseList,
+                experienceYears = (advisorData.getLong("experienceYears") ?: 0L).toInt(),
+                rating = 4.5f,
+                reviewCount = 0,
+                availability = true,
+                hourlyRate = null,
+                linkedinUrl = null,
+                company = null,
+                title = null
+            )
         } catch (e: Exception) {
+            Log.e("AdvisorRepository", "Get by ID error", e)
             null
         }
     }
 
     override suspend fun getFeaturedAdvisors(limit: Int): List<Advisor> {
-        return try {
-            advisorsCollection
-                .whereEqualTo("availability", true)
-                .limit(limit.toLong())
-                .get().await()
-                .toObjects(Advisor::class.java)
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return searchAdvisors(query = "", school = null, expertise = null)
+            .take(limit)
     }
 
     override suspend fun updateAdvisorProfile(advisor: Advisor): Result<Unit> {
         return try {
-            advisorsCollection.document(advisor.user.uid).set(advisor).await()
+            profilesCollection.document(advisor.user.uid)
+                .set(advisor.user, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+
+            profilesCollection.document(advisor.user.uid)
+                .collection("advisor")
+                .document("data")
+                .set(
+                    mapOf(
+                        "expertise" to advisor.expertise,
+                        "experienceYears" to advisor.experienceYears
+                    ),
+                    com.google.firebase.firestore.SetOptions.merge()
+                )
+                .await()
+
             Result.success(Unit)
         } catch (e: Exception) {
+            Log.e("AdvisorRepository", "Update error", e)
             Result.failure(e)
         }
     }
