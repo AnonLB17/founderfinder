@@ -1,5 +1,8 @@
 package com.phoenixcorp.founderfinder.domain.model
 
+import androidx.annotation.Keep
+
+@Keep
 data class Advisor(
     val user: User,
     val expertise: List<String> = emptyList(),

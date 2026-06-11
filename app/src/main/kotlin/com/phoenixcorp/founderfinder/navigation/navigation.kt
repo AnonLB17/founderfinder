@@ -41,8 +41,6 @@ import com.phoenixcorp.founderfinder.ui.screens.IdeaDevelopmentScreen
 import com.phoenixcorp.founderfinder.ui.screens.IdeaGenerationScreen
 import com.phoenixcorp.founderfinder.ui.screens.IncubatorConnectionScreen
 import com.phoenixcorp.founderfinder.ui.screens.IndustriesOfInterestScreen
-import com.phoenixcorp.founderfinder.ui.screens.IndustryPreferencesScreen
-import com.phoenixcorp.founderfinder.ui.screens.InvestmentPhilosophyScreen
 import com.phoenixcorp.founderfinder.ui.screens.InvestorInfoScreen
 import com.phoenixcorp.founderfinder.ui.screens.InvestorSearchScreen
 import com.phoenixcorp.founderfinder.ui.screens.LocalIssuesScreen
@@ -55,7 +53,7 @@ import com.phoenixcorp.founderfinder.ui.screens.OrganizationsOfInterestScreen
 import com.phoenixcorp.founderfinder.ui.screens.PartnerSearchFeatureScreen
 import com.phoenixcorp.founderfinder.ui.screens.PartnerSignUpScreen
 import com.phoenixcorp.founderfinder.ui.screens.PartnersScreen
-import com.phoenixcorp.founderfinder.ui.screens.PortfolioCompaniesScreen
+import com.phoenixcorp.founderfinder.ui.screens.PortfolioAndTermsScreen
 import com.phoenixcorp.founderfinder.ui.screens.PrivateChatScreen
 import com.phoenixcorp.founderfinder.ui.screens.PrivateMessagesScreen
 import com.phoenixcorp.founderfinder.ui.screens.PublicAppearanceScreen
@@ -66,7 +64,6 @@ import com.phoenixcorp.founderfinder.ui.screens.SelectUserTypeScreen
 import com.phoenixcorp.founderfinder.ui.screens.SignInScreen
 import com.phoenixcorp.founderfinder.ui.screens.SignUpScreen
 import com.phoenixcorp.founderfinder.ui.screens.SplashScreen
-import com.phoenixcorp.founderfinder.ui.screens.TermsAndExpectationsScreen
 import com.phoenixcorp.founderfinder.ui.screens.UserInfoScreen
 import com.phoenixcorp.founderfinder.ui.screens.UserProfileScreen
 import com.phoenixcorp.founderfinder.ui.screens.WorkExperienceScreen
@@ -129,17 +126,8 @@ fun AppNavGraph(
                     composable(Screen.InvestorInfo.route) {
                         InvestorInfoScreen(navController)
                     }
-                    composable(Screen.IndustryPreferences.route) {
-                        IndustryPreferencesScreen(navController)
-                    }
-                    composable(Screen.InvestmentPhilosophy.route) {
-                        InvestmentPhilosophyScreen(navController)
-                    }
-                    composable(Screen.PortfolioCompanies.route) {
-                        PortfolioCompaniesScreen(navController)
-                    }
-                    composable(Screen.TermsAndExpectations.route) {
-                        TermsAndExpectationsScreen(navController)
+                    composable(Screen.PortfolioAndTerms.route) {
+                        PortfolioAndTermsScreen(navController)
                     }
                     composable(Screen.Home.route) {
                         HomeScreen(navController)
@@ -351,10 +339,6 @@ fun OrganizationsOfInterestScreen(navController: NavHostController) { ScreenWith
 fun PublicAppearanceScreen(navController: NavHostController) { ScreenWithHeader(navController, "Public Appearance Screen") { Text("Public Appearance Screen Content") } }
 @Composable
 fun InvestorInfoScreen(navController: NavHostController) { ScreenWithHeader(navController, "Investor Info Screen") { Text("Investor Info Screen Content") } }
-@Composable
-fun IndustryPreferencesScreen(navController: NavHostController) { ScreenWithHeader(navController, "Industry Preferences Screen") { Text("Industry Preferences Screen Content") } }
-@Composable
-fun InvestmentPhilosophyScreen(navController: NavHostController) { ScreenWithHeader(navController, "Investment Philosophy Screen") { Text("Investment Philosophy Screen Content") } }
 @Composable
 fun PortfolioCompaniesScreen(navController: NavHostController) { ScreenWithHeader(navController, "Portfolio Companies Screen") { Text("Portfolio Companies Screen Content") } }
 @Composable

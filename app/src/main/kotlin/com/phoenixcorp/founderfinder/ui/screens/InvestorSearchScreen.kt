@@ -30,6 +30,7 @@ fun InvestorSearchScreen(navController: NavHostController) {
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
     val coroutineScope = rememberCoroutineScope()
+
     var investors by remember { mutableStateOf<List<Investor>>(emptyList()) }
     var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
     var isInvestorSearch by remember { mutableStateOf(true) }
@@ -50,64 +51,75 @@ fun InvestorSearchScreen(navController: NavHostController) {
             }
             return@LaunchedEffect
         }
+
         try {
             if (isInvestorSearch) {
-                Log.d("InvestorSearchScreen", "Fetching investors for user: ${currentUser.uid}")
-                val snapshot = firestore.collection("investors")
-                    .get()
-                    .await()
-                investors = snapshot.documents.mapNotNull { doc ->
+                Log.d("InvestorSearchScreen", "Fetching investors from profiles/{uid}/investor/data")
+
+                val profileSnapshot = firestore.collection("profiles").get().await()
+
+                investors = profileSnapshot.documents.mapNotNull { profileDoc ->
+                    val userId = profileDoc.id
                     try {
-                        // Fetch profile picture from profiles collection
-                        val profileDoc = firestore.collection("profiles")
-                            .document(doc.getString("userId") ?: "")
+                        val investorDataDoc = firestore.collection("profiles")
+                            .document(userId)
+                            .collection("investor")
+                            .document("data")
                             .get()
                             .await()
-                        val profilePicture = profileDoc.getString("profilePicture")
+
+                        if (!investorDataDoc.exists()) return@mapNotNull null
+
+                        val data = investorDataDoc.data ?: emptyMap<String, Any>()
+
+                        val firstName = profileDoc.getString("firstName") ?: ""
+                        val lastName = profileDoc.getString("lastName") ?: ""
+                        val fullName = "$firstName $lastName".trim().ifBlank {
+                            profileDoc.getString("name") ?: "Investor"
+                        }
+
+                        // FIXED: Handle both String and List for preferredStages
+                        val stageList = data["preferredStages"] as? List<*>
+                        val stageString = data["investmentStage"] as? String
+                        val preferredStage = stageString ?: stageList?.joinToString(", ") ?: ""
 
                         val investor = Investor(
-                            name = doc.getString("name") ?: "",
-                            email = doc.getString("email") ?: "",
-                            industry = doc.getString("industry") ?: "",
-                            philosophy = doc.getString("philosophy") ?: "",
-                            userId = doc.getString("userId") ?: "",
-                            createdAt = doc.getLong("createdAt") ?: 0L,
-                            preferredIndustries = doc.get("preferredIndustries")?.let { field ->
-                                if (field is List<*> && field.all { it is String }) field as List<String> else emptyList()
-                            } ?: emptyList(),
-                            investmentStage = doc.getString("investmentStage") ?: "",
-                            investmentRangeMin = doc.getString("investmentRangeMin") ?: "",
-                            investmentRangeMax = doc.getString("investmentRangeMax") ?: "",
-                            approachAndInvolvement = doc.getString("approachAndInvolvement") ?: "",
-                            roiExpectations = doc.getString("roiExpectations") ?: "",
-                            portfolioCompanies = doc.get("portfolioCompanies")?.let { field ->
-                                if (field is List<*> && field.all { it is String }) field as List<String> else emptyList()
-                            } ?: emptyList(),
-                            testimonials = doc.get("testimonials")?.let { field ->
-                                if (field is List<*> && field.all { it is String }) field as List<String> else emptyList()
-                            } ?: emptyList(),
-                            equityTerms = doc.getString("equityTerms") ?: "",
-                            boardRole = doc.getString("boardRole") ?: "",
-                            returnTimeline = doc.getString("returnTimeline") ?: "",
-                            profilePicture = profilePicture
+                            name = fullName,
+                            email = profileDoc.getString("email") ?: "",
+                            industry = data["industry"] as? String ?: "",
+                            philosophy = data["philosophy"] as? String ?: "",
+                            userId = userId,
+                            createdAt = (data["createdAt"] as? Long) ?: 0L,
+                            preferredIndustries = data["preferredIndustries"] as? List<String> ?: emptyList(),
+                            investmentStage = preferredStage,   // ← Fixed mapping
+                            investmentRangeMin = data["investmentRangeMin"] as? String ?: "",
+                            investmentRangeMax = data["investmentRangeMax"] as? String ?: "",
+                            approachAndInvolvement = data["approachAndInvolvement"] as? String ?: "",
+                            roiExpectations = data["roiExpectations"] as? String ?: "",
+                            portfolioCompanies = data["portfolioCompanies"] as? List<String> ?: emptyList(),
+                            testimonials = data["testimonials"] as? List<String> ?: emptyList(),
+                            equityTerms = data["equityTerms"] as? String ?: "",
+                            boardRole = data["boardRole"] as? String ?: "",
+                            returnTimeline = data["returnTimeline"] as? String ?: "",
+                            profilePicture = profileDoc.getString("profilePicture")
                         )
-                        Log.d("InvestorSearchScreen", "Fetched investor: ${investor.name}, Industries: ${investor.preferredIndustries}, Stage: ${investor.investmentStage}")
+
+                        Log.d("InvestorSearchScreen", "Fetched investor: ${investor.name} | Stage: ${investor.investmentStage} | Industries: ${investor.preferredIndustries}")
                         investor
                     } catch (e: Exception) {
-                        Log.e("InvestorSearchScreen", "Error parsing investor ${doc.id}: ${e.message}", e)
+                        Log.e("InvestorSearchScreen", "Error parsing investor for $userId: ${e.message}", e)
                         null
                     }
                 }
+
                 if (investors.isEmpty()) {
-                    Log.w("InvestorSearchScreen", "No investors found in Firestore")
-                    errorMessage = "No investors available."
+                    Log.w("InvestorSearchScreen", "No investors found in subcollections")
+                    errorMessage = "No investor profiles yet."
                 }
                 Log.d("InvestorSearchScreen", "Fetched ${investors.size} investors")
             } else {
                 Log.d("InvestorSearchScreen", "Fetching organizations for user: ${currentUser.uid}")
-                val snapshot = firestore.collection("organizations")
-                    .get()
-                    .await()
+                val snapshot = firestore.collection("organizations").get().await()
                 organizations = snapshot.documents.mapNotNull { doc ->
                     try {
                         doc.toObject(Organization::class.java)?.copy(id = doc.id)
@@ -116,11 +128,6 @@ fun InvestorSearchScreen(navController: NavHostController) {
                         null
                     }
                 }
-                if (organizations.isEmpty()) {
-                    Log.w("InvestorSearchScreen", "No organizations found in Firestore")
-                    errorMessage = "No organizations available."
-                }
-                Log.d("InvestorSearchScreen", "Fetched ${organizations.size} organizations")
             }
             isLoading = false
         } catch (e: Exception) {

@@ -11,6 +11,7 @@ interface InvestorRepository {
         focusAreas: List<String>? = null
     ): List<Investor>
 
+    suspend fun createInvestorProfile(investorData: Map<String, Any>): Result<Unit>
     suspend fun getInvestorById(uid: String): Investor?
     suspend fun getInvestorMatchesForFounder(founderId: String, limit: Int = 10): List<Investor>
 }

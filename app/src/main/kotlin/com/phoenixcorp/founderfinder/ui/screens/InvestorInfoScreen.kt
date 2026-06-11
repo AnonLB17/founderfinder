@@ -1,66 +1,72 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.phoenixcorp.founderfinder.domain.model.UserProfile
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.SetOptions
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
+import com.phoenixcorp.founderfinder.ui.viewmodel.InvestorUiState
+import com.phoenixcorp.founderfinder.ui.viewmodel.InvestorViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InvestorInfoScreen(navController: NavHostController) {
+fun InvestorInfoScreen(
+    navController: NavHostController,
+    viewModel: InvestorViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
-    val firestore = FirebaseFirestore.getInstance()
-    val auth = FirebaseAuth.getInstance()
+    val firestore = Firebase.firestore
+    val auth = Firebase.auth
     val currentUser = auth.currentUser
     val coroutineScope = rememberCoroutineScope()
 
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf(currentUser?.email ?: "") }
-    var industry by remember { mutableStateOf("") }
-    var philosophy by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val uiState by viewModel.uiState.collectAsState()
 
-    // Pre-fill name from Regular User Profile
-    LaunchedEffect(currentUser) {
-        if (currentUser != null) {
-            try {
-                val profileDoc = firestore.collection("users").document(currentUser.uid).get().await()
-                val profile = profileDoc.toObject(UserProfile::class.java)
-                if (profile != null) {
-                    name = when {
-                        !profile.firstName.isNullOrBlank() && !profile.lastName.isNullOrBlank() -> "${profile.firstName} ${profile.lastName}"
-                        !profile.firstName.isNullOrBlank() -> profile.firstName
-                        !profile.lastName.isNullOrBlank() -> profile.lastName
-                        else -> ""
-                    }
-                    Log.d("InvestorInfoScreen", "Pre-filled name: $name")
+    var industryInput by remember { mutableStateOf("") }
+    var preferredIndustries by remember { mutableStateOf(listOf<String>()) }
+    var philosophy by remember { mutableStateOf("") }
+    var investmentRangeMin by remember { mutableStateOf("") }
+    var investmentRangeMax by remember { mutableStateOf("") }
+    var preferredStages by remember { mutableStateOf("") }
+
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is InvestorUiState.Success -> {
+                Toast.makeText(context, "Investor profile created successfully!", Toast.LENGTH_LONG).show()
+                navController.navigate(Screen.PortfolioAndTerms.route) {
+                    popUpTo(Screen.SelectUserType.route) { inclusive = true }
                 }
-            } catch (e: Exception) {
-                Log.e("InvestorInfoScreen", "Error fetching user profile: ${e.message}", e)
             }
+            is InvestorUiState.Error -> {
+                val error = (uiState as InvestorUiState.Error).message
+                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+            }
+            else -> {}
         }
     }
 
     Scaffold(
         topBar = {
             ScreenBanner(
-                title = { Text("Create Investor Profile") },
+                title = { Text("Investor Profile") },
                 navController = navController,
-                showBackButton = true,
-                // Other parameters...
+                showBackButton = true
             )
         }
     ) { paddingValues ->
@@ -71,96 +77,141 @@ fun InvestorInfoScreen(navController: NavHostController) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Icon(
+                imageVector = Icons.Default.TrendingUp,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.tertiary
+            )
+
             Text(
-                text = "Enter your investor profile details",
-                style = MaterialTheme.typography.bodyLarge
+                text = "Tell us about your investment focus",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
+            // Preferred Industries
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Full Name") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = name.isBlank() && errorMessage != null
+                value = industryInput,
+                onValueChange = { industryInput = it },
+                label = { Text("Add Industry (e.g. Tech, Healthcare, Fintech)") },
+                modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Contact Email") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = email.isBlank() && errorMessage != null
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = industry,
-                onValueChange = { industry = it },
-                label = { Text("Primary Industry Focus") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = industry.isBlank() && errorMessage != null
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = philosophy,
-                onValueChange = { philosophy = it },
-                label = { Text("Investment Philosophy") },
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 3,
-                isError = philosophy.isBlank() && errorMessage != null
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            errorMessage?.let {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
 
             Button(
                 onClick = {
-                    if (currentUser == null) {
-                        Toast.makeText(context, "Please sign in", Toast.LENGTH_SHORT).show()
-                        navController.navigate(Screen.SignIn.route)
-                        return@Button
-                    }
-                    if (name.isBlank() || email.isBlank() || industry.isBlank() || philosophy.isBlank()) {
-                        errorMessage = "Please fill all fields."
-                        return@Button
-                    }
-                    coroutineScope.launch {
-                        try {
-                            val investorData = mapOf(
-                                "name" to name,
-                                "email" to email,
-                                "industry" to industry,
-                                "philosophy" to philosophy,
-                                "userId" to currentUser.uid,
-                                "createdAt" to System.currentTimeMillis()
-                            )
-                            firestore.collection("investors")
-                                .document(currentUser.uid)
-                                .set(investorData)
-                                .await()
-                            Toast.makeText(context, "Investor profile created", Toast.LENGTH_SHORT).show()
-                            navController.navigate(Screen.IndustryPreferences.route) {
-                                popUpTo(Screen.SelectUserType.route) { inclusive = true }
-                            }
-                        } catch (e: Exception) {
-                            Log.e("InvestorInfoScreen", "Error creating profile: ${e.message}", e)
-                            errorMessage = "Failed to create profile: ${e.message}"
-                        }
+                    if (industryInput.isNotBlank()) {
+                        preferredIndustries = preferredIndustries + industryInput.trim()
+                        industryInput = ""
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Next")
+                Text("+ Add Industry")
+            }
+
+            if (preferredIndustries.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Selected Industries:", style = MaterialTheme.typography.titleSmall)
+                preferredIndustries.forEach { industry ->
+                    Text("• $industry", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Investment Philosophy
+            OutlinedTextField(
+                value = philosophy,
+                onValueChange = { philosophy = it },
+                label = { Text("Investment Philosophy *") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 5
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Investment Range
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = investmentRangeMin,
+                    onValueChange = { investmentRangeMin = it },
+                    label = { Text("Min Investment ($)") },
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = investmentRangeMax,
+                    onValueChange = { investmentRangeMax = it },
+                    label = { Text("Max Investment ($)") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = preferredStages,
+                onValueChange = { preferredStages = it },
+                label = { Text("Preferred Stages (e.g. Seed, Series A)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = {
+                    if (preferredIndustries.isEmpty() || philosophy.isBlank()) {
+                        Toast.makeText(context, "Please add at least one industry and investment philosophy.", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
+                    if (currentUser == null) {
+                        Toast.makeText(context, "Not logged in", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
+                    val investorData = mapOf(
+                        "preferredIndustries" to preferredIndustries,
+                        "philosophy" to philosophy,
+                        "investmentRangeMin" to investmentRangeMin,
+                        "investmentRangeMax" to investmentRangeMax,
+                        "investmentStage" to preferredStages.split(",").map { it.trim() }.filter { it.isNotBlank() },  // Changed to match InvestorCard
+                        "updatedAt" to System.currentTimeMillis()
+                    )
+
+                    coroutineScope.launch {
+                        try {
+                            val uid = currentUser.uid
+
+                            // Update main profile role
+                            firestore.collection("profiles")
+                                .document(uid)
+                                .set(mapOf("role" to "INVESTOR"), SetOptions.merge())
+                                .await()
+
+                            // Save / update investor data in the same document
+                            firestore.collection("profiles")
+                                .document(uid)
+                                .collection("investor")
+                                .document("data")
+                                .set(investorData, SetOptions.merge())
+                                .await()
+
+                            viewModel.createInvestorProfile(mapOf("userId" to uid))
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = uiState !is InvestorUiState.Loading
+            ) {
+                if (uiState is InvestorUiState.Loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    Text("Save & Continue")
+                }
             }
         }
     }

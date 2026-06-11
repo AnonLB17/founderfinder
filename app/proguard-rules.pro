@@ -1,41 +1,39 @@
 # =============================================
-# Google Play Licensing
+# Google Play Licensing & Basics
 # =============================================
 -keep public class com.google.android.vending.licensing.ILicensingService { *; }
 
 # =============================================
-# Keep Annotations
+# Keep Annotations & Metadata
 # =============================================
 -keepattributes *Annotation*
+-keepattributes SourceFile,LineNumberTable
 -keep class android.support.annotation.Keep
 -keep @interface androidx.annotation.Keep { *; }
 -keep @androidx.annotation.Keep class * { *; }
--keep @interface com.google.android.gms.common.annotation.KeepName { *; }
--keep @com.google.android.gms.common.annotation.KeepName class * { *; }
--keep @interface com.google.android.gms.common.util.DynamiteApi { *; }
-
-# =============================================
-# YOUR APP MODELS (Critical for Firestore)
-# =============================================
--keep class com.phoenixcorp.founderfinder.domain.model.** { *; }
--keepclassmembers class com.phoenixcorp.founderfinder.domain.model.** {
-    <fields>;
-    <init>(...);
-    public <init>(...);
-}
-
-# Keep Firestore annotations and property names
 -keepclassmembers class * {
     @com.google.firebase.firestore.PropertyName <fields>;
     @com.google.firebase.firestore.DocumentId <fields>;
 }
 
 # =============================================
+# YOUR DOMAIN MODELS (Most Critical)
+# =============================================
+-keep class com.phoenixcorp.founderfinder.domain.model.** { *; }
+-keepclassmembers class com.phoenixcorp.founderfinder.domain.model.** { *; }
+-keepnames class com.phoenixcorp.founderfinder.domain.model.**
+
+# Extra strong protection for Firestore serialization
+-keepclassmembers class * extends com.phoenixcorp.founderfinder.domain.model.** { *; }
+-keepclassmembers class * implements com.phoenixcorp.founderfinder.domain.model.** { *; }
+
+# =============================================
 # Firebase / Firestore
 # =============================================
--keep class * implements com.google.firebase.components.ComponentRegistrar { *; }
--keep,allowshrinking interface com.google.firebase.components.ComponentRegistrar { *; }
+-keep class com.google.firebase.** { *; }
+-keepclassmembers class com.google.firebase.** { *; }
 -keep class com.google.firebase.firestore.** { *; }
+-keepclassmembers class com.google.firebase.firestore.** { *; }
 -dontwarn com.google.firebase.**
 
 # =============================================
@@ -43,48 +41,42 @@
 # =============================================
 -keep,allowobfuscation,allowshrinking @dagger.hilt.EntryPoint class * { *; }
 -keep,allowobfuscation,allowshrinking @dagger.hilt.android.EarlyEntryPoint class * { *; }
--keep,allowobfuscation,allowshrinking @dagger.hilt.internal.ComponentEntryPoint class * { *; }
--keep,allowobfuscation,allowshrinking @dagger.hilt.internal.GeneratedEntryPoint class * { *; }
 -keep class com.phoenixcorp.founderfinder.**_Hilt* { *; }
+-keep class dagger.hilt.** { *; }
 
 # =============================================
-# Navigation
+# Jetpack Compose & Navigation
 # =============================================
+-keep,allowshrinking class * extends androidx.compose.ui.node.ModifierNodeElement { *; }
 -keep,allowobfuscation,allowshrinking class * extends androidx.navigation.Navigator { *; }
 
 # =============================================
-# Jetpack Compose
-# =============================================
--keep,allowshrinking class * extends androidx.compose.ui.node.ModifierNodeElement { *; }
-
-# =============================================
-# Coil (Image Loading)
+# Coil Image Loading
 # =============================================
 -keep class coil.** { *; }
--dontwarn coil.*
+-dontwarn coil.**
 
 # =============================================
-# Google Play Services & Parcelables
+# Parcelable & Google Play Services
 # =============================================
+-keep class * implements android.os.Parcelable { *; }
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator CREATOR;
+}
 -keep class com.google.android.gms.common.internal.ReflectedParcelable { *; }
--keep,allowshrinking class * implements com.google.android.gms.common.internal.ReflectedParcelable { *; }
--keep,allowshrinking class * implements androidx.versionedparcelable.VersionedParcelable { *; }
--keep public class androidx.versionedparcelable.ParcelImpl { *; }
--keep,allowshrinking class * extends androidx.startup.Initializer { *; }
 
 # =============================================
-# Kotlin Serialization / Coroutines
+# Kotlin & Coroutines
 # =============================================
 -keepattributes Annotation, InnerClasses
 -keep class kotlin.Metadata { *; }
--dontnote kotlinx.serialization.SerializationStrategy
--dontnote kotlinx.serialization.DeserializationStrategy
+-keepclassmembers class kotlinx.coroutines.** { *; }
 
 # =============================================
 # General
 # =============================================
--keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+-keepattributes SourceFile,LineNumberTable
 
-# Optional: Enable this temporarily to debug what's being removed
-#-printmapping mapping.txt
+# Optional: Uncomment during debugging to see what is being removed
+# -printmapping mapping.txt

@@ -1,5 +1,8 @@
 package com.phoenixcorp.founderfinder.domain.model
 
+import androidx.annotation.Keep
+
+@Keep
 data class User(
     val uid: String = "",
     val name: String = "",
@@ -10,12 +13,10 @@ data class User(
 
     val role: UserRole = UserRole.FOUNDER,
 
-    /** NEW: Added for onboarding */
     val roleProfile: RoleProfile? = null,
 
     val interests: List<String> = emptyList(),
 
-    /** NEW: Helpful flags */
     val isOnboarded: Boolean = false,
     val isVerified: Boolean = false,
 
@@ -23,6 +24,7 @@ data class User(
     val lastActiveAt: Long = System.currentTimeMillis()
 )
 
+@Keep
 enum class UserRole {
     FOUNDER,
     INVESTOR,
