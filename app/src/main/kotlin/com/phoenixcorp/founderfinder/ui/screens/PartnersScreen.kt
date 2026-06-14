@@ -447,8 +447,8 @@ fun PartnersScreen(navController: NavHostController) {
                     currentMonth = currentMonth,
                     activities = activities.filter { activity ->
                         when {
-                            selectedOrgId != null -> activity.organizationId == selectedOrgId
                             selectedPartnerId != null -> activity.creatorId == selectedPartnerId
+                            selectedOrgId != null -> activity.organizationId == selectedOrgId || activity.orgId == selectedOrgId
                             currentUser != null -> activity.creatorId == currentUser.uid
                             else -> false
                         }
@@ -462,12 +462,15 @@ fun PartnersScreen(navController: NavHostController) {
                     },
                     onDayLongPress = { day ->
                         selectedDay = day
-                        if (selectedOrgId == null && organizations.isNotEmpty()) {
+
+                        // Only auto-select organization if NOTHING is selected
+                        if (selectedOrgId == null && selectedPartnerId == null && organizations.isNotEmpty()) {
                             selectedOrgId = organizations.first().id
                             Toast.makeText(context, "Selected organization: ${organizations.first().name}", Toast.LENGTH_SHORT).show()
                         }
+
                         showActivityInput = true
-                        Log.d("PartnersScreen", "Long pressed day: $day, showActivityInput: $showActivityInput")
+                        Log.d("PartnersScreen", "Long pressed day: $day | Org: $selectedOrgId | Partner: $selectedPartnerId")
                     },
                     onPreviousMonth = {
                         currentMonth = Calendar.getInstance().apply {
@@ -487,20 +490,21 @@ fun PartnersScreen(navController: NavHostController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Activity Input or Details
+// Activity Input or Details
                 if (selectedDay != null) {
-                    var dayActivities = activities.filter { activity ->
+                    val dayActivities = activities.filter { activity ->
                         val activityDate = Calendar.getInstance().apply { timeInMillis = activity.date }
                         activityDate.get(Calendar.DAY_OF_MONTH) == selectedDay &&
                                 activityDate.get(Calendar.MONTH) == currentMonth.get(Calendar.MONTH) &&
                                 activityDate.get(Calendar.YEAR) == currentMonth.get(Calendar.YEAR) &&
                                 (when {
-                                    selectedOrgId != null -> activity.organizationId == selectedOrgId
+                                    selectedOrgId != null -> activity.organizationId == selectedOrgId || activity.orgId == selectedOrgId
                                     selectedPartnerId != null -> activity.creatorId == selectedPartnerId
                                     currentUser != null -> activity.creatorId == currentUser.uid
                                     else -> false
                                 })
-                    }.sortedBy { it.time } // Sort by time (earliest to latest)
+                    }.sortedBy { it.time }
+
                     if (showActivityInput) {
                         OutlinedTextField(
                             value = activityTitle,
@@ -514,44 +518,44 @@ fun PartnersScreen(navController: NavHostController) {
                             value = activityDescription,
                             onValueChange = { activityDescription = it },
                             label = { Text("Activity Description") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Select Time Slot",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (timeSlots.isNotEmpty()) {
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                items(timeSlots) { slot ->
-                                    val isBooked = dayActivities.any { it.time == slot }
-                                    Button(
-                                        onClick = { if (!isBooked) selectedTimeSlot = slot },
-                                        enabled = !isBooked,
-                                        modifier = Modifier.width(100.dp)
-                                    ) {
-                                        Text(slot)
-                                    }
+                        Text("Select Time Slot", style = MaterialTheme.typography.bodyMedium)
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(timeSlots) { slot ->
+                                val isBooked = dayActivities.any { it.time == slot }
+                                Button(
+                                    onClick = { selectedTimeSlot = slot },
+                                    enabled = !isBooked,
+                                    colors = if (selectedTimeSlot == slot)
+                                        ButtonDefaults.buttonColors(MaterialTheme.colorScheme.primary)
+                                    else ButtonDefaults.buttonColors(),
+                                    modifier = Modifier.width(100.dp)
+                                ) {
+                                    Text(slot)
                                 }
                             }
-                        } else {
-                            Text("No time slots available")
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         Button(
                             onClick = {
-                                Log.d("PartnersScreen", "Add Activity clicked: title=$activityTitle, description=$activityDescription, timeSlot=$selectedTimeSlot")
-                                if (currentUser != null && activityTitle.isNotBlank() && selectedTimeSlot != null && selectedOrgId != null) {
+                                if (currentUser != null && activityTitle.isNotBlank() && selectedTimeSlot != null) {
                                     coroutineScope.launch {
                                         try {
                                             val activityDate = Calendar.getInstance().apply {
                                                 time = currentMonth.time
                                                 set(Calendar.DAY_OF_MONTH, selectedDay!!)
                                             }.timeInMillis
-                                            val activity = Activity(
+
+                                            val newActivity = Activity(
                                                 title = activityTitle,
                                                 description = activityDescription,
                                                 partnerId = selectedPartnerId ?: currentUser.uid,
@@ -561,41 +565,53 @@ fun PartnersScreen(navController: NavHostController) {
                                                 orgId = selectedOrgId,
                                                 organizationId = selectedOrgId
                                             )
-                                            Log.d("PartnersScreen", "Adding activity: $activity to org: $selectedOrgId")
-                                            val docRef = firestore.collection("organizations")
-                                                .document(selectedOrgId!!)
-                                                .collection("activities")
-                                                .add(activity)
-                                                .await()
-                                            Log.d("PartnersScreen", "Activity added with ID: ${docRef.id}")
+
+                                            if (selectedOrgId != null) {
+                                                // Organization Activity (existing behavior)
+                                                firestore.collection("organizations")
+                                                    .document(selectedOrgId!!)
+                                                    .collection("activities")
+                                                    .add(newActivity)
+                                                    .await()
+                                                Toast.makeText(context, "Organization activity added!", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                // PERSONAL ACTIVITY - Save under user's profile
+                                                firestore.collection("profiles")
+                                                    .document(currentUser.uid)
+                                                    .collection("activities")
+                                                    .add(newActivity)
+                                                    .await()
+                                                Toast.makeText(context, "Personal activity added!", Toast.LENGTH_SHORT).show()
+                                            }
+
+                                            // Clear form
                                             activityTitle = ""
                                             activityDescription = ""
                                             selectedTimeSlot = null
                                             showActivityInput = false
-                                            Toast.makeText(context, "Activity added", Toast.LENGTH_SHORT).show()
+
                                         } catch (e: Exception) {
-                                            Log.e("PartnersScreen", "Failed to add activity: ${e.message}", e)
-                                            Toast.makeText(context, "Failed to add activity: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            Log.e("PartnersScreen", "Failed to add activity", e)
+                                            Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 } else {
-                                    val reason = when {
-                                        activityTitle.isBlank() -> "Title is empty"
-                                        selectedTimeSlot == null -> "No time slot selected"
-                                        selectedOrgId == null -> "No organization selected"
-                                        else -> "Unknown validation failure"
+                                    val message = when {
+                                        activityTitle.isBlank() -> "Please enter an activity title"
+                                        selectedTimeSlot == null -> "Please select a time slot"
+                                        else -> "Please fill required fields"
                                     }
-                                    Log.w("PartnersScreen", "Validation failed: $reason")
-                                    Toast.makeText(context, "Please select an organization, enter a title, and select a time slot", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = activityTitle.isNotBlank() && selectedTimeSlot != null && selectedOrgId != null
+                            enabled = activityTitle.isNotBlank() && selectedTimeSlot != null
                         ) {
                             Text("Add Activity")
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                     } else {
+                        // Existing day activities display code (unchanged)
                         if (dayActivities.isNotEmpty()) {
                             Text(
                                 text = "Activities for ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(

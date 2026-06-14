@@ -33,19 +33,25 @@ class PartnerRepositoryImpl @Inject constructor(
                     .await()
 
                 if (partnerDataDoc.exists()) {
-                    val data = doc.data ?: continue
+                    val profileData = doc.data ?: continue
 
                     // Build full name
-                    val firstName = data["firstName"] as? String ?: ""
-                    val lastName = data["lastName"] as? String ?: ""
+                    val firstName = profileData["firstName"] as? String ?: ""
+                    val lastName = profileData["lastName"] as? String ?: ""
                     val fullName = listOfNotNull(firstName.ifBlank { null }, lastName.ifBlank { null })
                         .joinToString(" ")
-                        .ifBlank { (data["name"] as? String) ?: "Partner" }
+                        .ifBlank { (profileData["name"] as? String) ?: "Partner" }
 
-                    val user = doc.toObject(User::class.java)?.copy(
+                    // CRITICAL: Pull profile picture from main profile
+                    val profilePicture = profileData["profilePicture"] as? String
+
+                    val user = User(
                         uid = doc.id,
-                        name = fullName
-                    ) ?: User(uid = doc.id, name = fullName)
+                        name = fullName,
+                        email = profileData["email"] as? String,
+                        profileImageUrl = profilePicture,   // ← This was missing
+                        bio = profileData["ambitionStatement"] as? String
+                    )
 
                     // Map expertise → skills
                     val skillsList = when (val exp = partnerDataDoc.get("expertise")) {
@@ -83,18 +89,23 @@ class PartnerRepositoryImpl @Inject constructor(
     override suspend fun getPartnerById(uid: String): Partner? {
         return try {
             val userDoc = profilesCollection.document(uid).get().await()
-            val data = userDoc.data ?: return null
+            val profileData = userDoc.data ?: return null
 
-            val firstName = data["firstName"] as? String ?: ""
-            val lastName = data["lastName"] as? String ?: ""
+            val firstName = profileData["firstName"] as? String ?: ""
+            val lastName = profileData["lastName"] as? String ?: ""
             val fullName = listOfNotNull(firstName.ifBlank { null }, lastName.ifBlank { null })
                 .joinToString(" ")
-                .ifBlank { (data["name"] as? String) ?: "Partner" }
+                .ifBlank { (profileData["name"] as? String) ?: "Partner" }
 
-            val user = userDoc.toObject(User::class.java)?.copy(
+            val profilePicture = profileData["profilePicture"] as? String
+
+            val user = User(
                 uid = uid,
-                name = fullName
-            ) ?: User(uid = uid, name = fullName)
+                name = fullName,
+                email = profileData["email"] as? String,
+                profileImageUrl = profilePicture,
+                bio = profileData["ambitionStatement"] as? String
+            )
 
             val partnerData = profilesCollection.document(uid)
                 .collection("partner")

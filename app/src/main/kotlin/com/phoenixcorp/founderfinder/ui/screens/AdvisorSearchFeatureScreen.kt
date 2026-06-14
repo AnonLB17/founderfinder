@@ -25,7 +25,6 @@ fun AdvisorSearchFeatureScreen(
     val uiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
 
-    // Trigger search whenever the user types
     LaunchedEffect(searchQuery) {
         viewModel.searchAdvisors(searchQuery)
     }
@@ -46,7 +45,6 @@ fun AdvisorSearchFeatureScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -66,12 +64,9 @@ fun AdvisorSearchFeatureScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Main Content
             when (uiState) {
                 is AdvisorSearchUiState.Loading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
                 is AdvisorSearchUiState.Success -> {
                     val advisors = (uiState as AdvisorSearchUiState.Success).advisors

@@ -17,7 +17,7 @@ import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Forum
-import com.phoenixcorp.founderfinder.ui.components.ForumCard
+import com.phoenixcorp.founderfinder.ui.components.SchoolForumCard   // ← Updated import
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -68,7 +68,6 @@ fun SchoolForumsScreen(navController: NavHostController) {
                     val data = doc.data ?: return@mapNotNull null
                     val title = data["name"] as? String ?: "Untitled"
                     val id = doc.id
-                    // Validate title and id
                     if (title.isBlank() || id.isBlank()) {
                         Log.w("SchoolForumsScreen", "Invalid forum data: id=$id, title=$title")
                         return@mapNotNull null
@@ -158,8 +157,8 @@ fun SchoolForumsScreen(navController: NavHostController) {
     // Debounced search filtering
     val debouncedSearchQuery by produceState(initialValue = searchQuery, key1 = searchQuery) {
         isSearching = true
-        delay(300) // Debounce for 300ms
-        value = searchQuery.trim() // Trim whitespace
+        delay(300)
+        value = searchQuery.trim()
         isSearching = false
         Log.d("SchoolForumsScreen", "Debounced search query: $value")
     }
@@ -173,7 +172,6 @@ fun SchoolForumsScreen(navController: NavHostController) {
             forums.filter { forum ->
                 val titleMatch = forum.title.lowercase().contains(queryLower)
                 val idMatch = forum.id.lowercase().contains(queryLower)
-                Log.d("SchoolForumsScreen", "Forum ${forum.id}: title=${forum.title}, titleMatch=$titleMatch, idMatch=$idMatch")
                 titleMatch || idMatch
             }
         }
@@ -219,8 +217,7 @@ fun SchoolForumsScreen(navController: NavHostController) {
             when {
                 isLoading -> {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
@@ -233,8 +230,7 @@ fun SchoolForumsScreen(navController: NavHostController) {
                 }
                 isSearching -> {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
@@ -247,8 +243,7 @@ fun SchoolForumsScreen(navController: NavHostController) {
                 }
                 errorMessage != null -> {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -260,8 +255,7 @@ fun SchoolForumsScreen(navController: NavHostController) {
                 }
                 filteredForums.isEmpty() -> {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -276,11 +270,9 @@ fun SchoolForumsScreen(navController: NavHostController) {
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredForums) { forum ->
-                            ForumCard(
+                            SchoolForumCard(           // ← Changed from ForumCard
                                 forum = forum,
-                                navController = navController,
-                                category = category,
-                                forumId = forum.id
+                                navController = navController
                             )
                         }
                     }

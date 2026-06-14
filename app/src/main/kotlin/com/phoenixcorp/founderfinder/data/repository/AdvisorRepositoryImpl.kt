@@ -32,19 +32,25 @@ class AdvisorRepositoryImpl @Inject constructor(
                     .await()
 
                 if (advisorDataDoc.exists()) {
-                    val data = doc.data ?: continue
+                    val profileData = doc.data ?: continue
 
-                    // Build full name from Firestore data
-                    val firstName = data["firstName"] as? String ?: ""
-                    val lastName = data["lastName"] as? String ?: ""
+                    // Build full name
+                    val firstName = profileData["firstName"] as? String ?: ""
+                    val lastName = profileData["lastName"] as? String ?: ""
                     val fullName = listOfNotNull(firstName.ifBlank { null }, lastName.ifBlank { null })
                         .joinToString(" ")
-                        .ifBlank { (data["name"] as? String) ?: "Advisor" }
+                        .ifBlank { (profileData["name"] as? String) ?: "Advisor" }
 
-                    val user = doc.toObject(User::class.java)?.copy(
+                    // CRITICAL: Pull profile picture from main profile
+                    val profilePicture = profileData["profilePicture"] as? String
+
+                    val user = User(
                         uid = doc.id,
-                        name = fullName
-                    ) ?: User(uid = doc.id, name = fullName)
+                        name = fullName,
+                        email = profileData["email"] as? String,
+                        profileImageUrl = profilePicture,   // ← This was missing
+                        bio = profileData["ambitionStatement"] as? String
+                    )
 
                     // Handle expertise (String or List)
                     val expertiseList = when (val exp = advisorDataDoc.get("expertise")) {
@@ -82,21 +88,27 @@ class AdvisorRepositoryImpl @Inject constructor(
         }
     }
 
+    // ... (getAdvisorById and other methods can stay the same or be updated similarly)
     override suspend fun getAdvisorById(uid: String): Advisor? {
         return try {
             val userDoc = profilesCollection.document(uid).get().await()
-            val data = userDoc.data ?: return null
+            val profileData = userDoc.data ?: return null
 
-            val firstName = data["firstName"] as? String ?: ""
-            val lastName = data["lastName"] as? String ?: ""
+            val firstName = profileData["firstName"] as? String ?: ""
+            val lastName = profileData["lastName"] as? String ?: ""
             val fullName = listOfNotNull(firstName.ifBlank { null }, lastName.ifBlank { null })
                 .joinToString(" ")
-                .ifBlank { (data["name"] as? String) ?: "Advisor" }
+                .ifBlank { (profileData["name"] as? String) ?: "Advisor" }
 
-            val user = userDoc.toObject(User::class.java)?.copy(
+            val profilePicture = profileData["profilePicture"] as? String
+
+            val user = User(
                 uid = uid,
-                name = fullName
-            ) ?: User(uid = uid, name = fullName)
+                name = fullName,
+                email = profileData["email"] as? String,
+                profileImageUrl = profilePicture,
+                bio = profileData["ambitionStatement"] as? String
+            )
 
             val advisorData = profilesCollection.document(uid)
                 .collection("advisor")
@@ -128,6 +140,7 @@ class AdvisorRepositoryImpl @Inject constructor(
         }
     }
 
+    // ... keep the rest of your methods unchanged
     override suspend fun getFeaturedAdvisors(limit: Int): List<Advisor> {
         return searchAdvisors(query = "", school = null, expertise = null)
             .take(limit)

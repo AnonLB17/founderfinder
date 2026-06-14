@@ -87,13 +87,15 @@ fun CalendarSection(
                             activityDate.get(Calendar.YEAR) == currentMonth.get(Calendar.YEAR)
                 }
                 val activityCount = dayActivities.size
-                val maxSlots = timeSlots.size
+
+                // Color coding: Personal (Blue), Org (Green), Mixed (Purple)
                 val busynessColor = when {
                     activityCount == 0 -> null
-                    activityCount <= 2 || activityCount.toFloat() / maxSlots < 0.5f -> MaterialTheme.colorScheme.primary
-                    activityCount <= 4 || activityCount.toFloat() / maxSlots < 0.75f -> Color.Yellow
-                    else -> MaterialTheme.colorScheme.error
+                    dayActivities.any { it.orgId != null } && dayActivities.any { it.orgId == null } -> Color(0xFF9C27B0) // Purple = mixed
+                    dayActivities.any { it.orgId != null } -> Color(0xFF4CAF50) // Green = organization
+                    else -> MaterialTheme.colorScheme.primary // Blue = personal
                 }
+
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -117,7 +119,7 @@ fun CalendarSection(
                     Text(
                         text = day.toString(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (dayActivities.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        color = if (activityCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -131,18 +133,44 @@ fun CalendarSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Legend
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            LegendDot(color = MaterialTheme.colorScheme.primary, label = "Personal")
+            Spacer(modifier = Modifier.width(16.dp))
+            LegendDot(color = Color(0xFF4CAF50), label = "Organization")
+            Spacer(modifier = Modifier.width(16.dp))
+            LegendDot(color = Color(0xFF9C27B0), label = "Mixed")
+        }
+
         // Navigation Arrows
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onPreviousMonth) { Text("<") }
+            TextButton(onClick = onPreviousMonth) { Text("< Previous") }
             Text(
                 text = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(currentMonth.time),
                 style = MaterialTheme.typography.bodyLarge
             )
-            TextButton(onClick = onNextMonth) { Text(">") }
+            TextButton(onClick = onNextMonth) { Text("Next >") }
         }
+    }
+}
+
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text = label, style = MaterialTheme.typography.bodySmall)
     }
 }

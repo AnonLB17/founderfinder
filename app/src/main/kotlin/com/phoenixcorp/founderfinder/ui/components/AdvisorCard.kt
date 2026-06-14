@@ -40,7 +40,7 @@ fun AdvisorCard(
     val user = profile.user
     val userId = user.uid
 
-    Log.d("AdvisorCard", "Rendering card for userId: $userId, name: ${user.name}")
+    Log.d("AdvisorCard", "Rendering card → userId: $userId | name: ${user.name} | pictureUrl: ${user.profileImageUrl}")
 
     val expertiseText = when {
         profile.expertise.isNotEmpty() -> profile.expertise.joinToString(", ")
@@ -52,16 +52,8 @@ fun AdvisorCard(
             .fillMaxWidth()
             .padding(8.dp)
             .clickable {
-                Log.d("AdvisorCard", "Card clicked - navigating to UserProfile for: $userId")
                 if (userId.isNotBlank()) {
-                    try {
-                        navController.navigate(Screen.UserProfile.createRoute(userId))
-                    } catch (e: Exception) {
-                        Log.e("AdvisorCard", "Navigation failed", e)
-                        Toast.makeText(context, "Navigation error: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(context, "User ID is missing", Toast.LENGTH_SHORT).show()
+                    navController.navigate(Screen.UserProfile.createRoute(userId))
                 }
             }
     ) {
@@ -71,11 +63,13 @@ fun AdvisorCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile Picture
+            // Profile Picture - Very defensive loading
+            val imageUrl = user.profileImageUrl?.takeIf { it.isNotBlank() }
+
             Image(
                 painter = rememberAsyncImagePainter(
                     model = ImageRequest.Builder(context)
-                        .data(user.profileImageUrl)
+                        .data(imageUrl)
                         .crossfade(true)
                         .placeholder(R.drawable.ic_profile_placeholder)
                         .error(R.drawable.ic_profile_placeholder)
@@ -111,7 +105,6 @@ fun AdvisorCard(
 
             // Message Button
             IconButton(onClick = {
-                Log.d("AdvisorCard", "Message button clicked for: $userId")
                 val currentUser = auth.currentUser ?: run {
                     navController.navigate(Screen.SignIn.route)
                     return@IconButton
