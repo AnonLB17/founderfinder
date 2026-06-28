@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -25,15 +26,17 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
+import com.phoenixcorp.founderfinder.domain.model.ChatMessage
 
 
 import com.phoenixcorp.founderfinder.domain.model.Invitation
-import com.phoenixcorp.founderfinder.domain.model.Message
 import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
+import com.phoenixcorp.founderfinder.domain.usecase.SendChatMessageUseCase
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.OrganizationCard
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
+import com.phoenixcorp.founderfinder.ui.viewmodel.PrivateChatViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -41,14 +44,20 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun PrivateChatScreen(navController: NavHostController, conversationId: String) {
+fun PrivateChatScreen(
+    navController: NavHostController,
+    conversationId: String,
+    privateChatViewModel: PrivateChatViewModel = hiltViewModel()
+) {
+    val sendChatMessageUseCase: SendChatMessageUseCase = privateChatViewModel.sendChatMessageUseCase   // ← This line
+
     val auth = FirebaseAuth.getInstance()
     val firestore = Firebase.firestore
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val currentUser = auth.currentUser
     var messageText by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
+    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var recipientName by remember { mutableStateOf("Loading...") }
@@ -217,7 +226,7 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
                         if (snapshot != null) {
                             val newMessages = snapshot.documents.mapNotNull { doc ->
                                 try {
-                                    doc.toObject(Message::class.java)?.copy(id = doc.id)
+                                    doc.toObject(ChatMessage::class.java)?.copy(id = doc.id)
                                 } catch (e: Exception) {
                                     Log.e("PrivateChat", "Error parsing message ${doc.id}: ${e.message}")
                                     null
@@ -319,13 +328,13 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
                         }
                     }
                     items(messages.reversed()) { message ->
-                        Log.d("PrivateChat", "Rendering message: ${message.content}")
+                        Log.d("PrivateChat", "Rendering message: ${message.text}")
                         when (message.type) {
                             "text" -> MessageBubble(
-                                message = message,
+                                message = message as ChatMessage,
                                 isSentByCurrentUser = message.senderId == currentUser?.uid
                             )
-                            "organization" -> message.orgId?.let { orgId ->
+                            "organization" -> (message as? ChatMessage)?.orgId?.let { orgId ->
                                 OrganizationCard(
                                     orgId = orgId,
                                     invitationId = message.id ?: UUID.randomUUID().toString(),
@@ -365,6 +374,7 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
                                 messageText,
                                 firestore,
                                 coroutineScope,
+                                sendChatMessageUseCase,   // ← Add this
                                 onSuccess = { messageText = "" },
                                 onError = { error ->
                                     errorMessage = "Failed to send message: ${error.message}"
@@ -385,6 +395,7 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
                                 messageText,
                                 firestore,
                                 coroutineScope,
+                                sendChatMessageUseCase,   // ← Add this
                                 onSuccess = { messageText = "" },
                                 onError = { error ->
                                     errorMessage = "Failed to send message: ${error.message}"
@@ -560,7 +571,7 @@ fun PrivateChatScreen(navController: NavHostController, conversationId: String) 
 }
 
 @Composable
-fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
+fun MessageBubble(message: ChatMessage, isSentByCurrentUser: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -580,7 +591,7 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                 modifier = Modifier.padding(8.dp)
             ) {
                 Text(
-                    text = message.content ?: "",
+                    text = message.text,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
@@ -594,6 +605,7 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
     }
 }
 
+// Inside PrivateChatScreen composable, after the DisposableEffect, add this local function:
 private fun sendMessage(
     currentUser: com.google.firebase.auth.FirebaseUser?,
     conversationId: String,
@@ -601,6 +613,7 @@ private fun sendMessage(
     messageText: String,
     firestore: FirebaseFirestore,
     coroutineScope: CoroutineScope,
+    sendChatMessageUseCase: SendChatMessageUseCase,
     onSuccess: () -> Unit,
     onError: (Exception) -> Unit
 ) {
@@ -608,35 +621,30 @@ private fun sendMessage(
         coroutineScope.launch {
             try {
                 Log.d("PrivateChat", "Sending text message from ${currentUser.uid} to $recipientId in conversation $conversationId")
-                // Create or update conversation document
-                val conversationData = hashMapOf(
-                    "senderId" to currentUser.uid,
-                    "recipientId" to recipientId,
-                    "lastUpdated" to System.currentTimeMillis()
-                )
-                firestore.collection("conversations")
-                    .document(conversationId)
-                    .set(conversationData, com.google.firebase.firestore.SetOptions.merge())
-                    .await()
-                Log.d("PrivateChat", "Conversation document created/updated: $conversationId")
 
-                // Add message to sub-collection
-                val message = Message(
+                val message = ChatMessage(
                     id = UUID.randomUUID().toString(),
+                    chatId = conversationId,
                     senderId = currentUser.uid,
+                    senderName = currentUser.displayName ?: "You",
                     recipientId = recipientId,
-                    content = messageText,
+                    text = messageText,
                     timestamp = System.currentTimeMillis(),
                     type = "text"
                 )
-                firestore.collection("conversations")
-                    .document(conversationId)
-                    .collection("messages")
-                    .document(message.id!!)
-                    .set(message)
-                    .await()
-                Log.d("PrivateChat", "Text message sent successfully: ${message.id}")
-                onSuccess()
+
+                Log.d("PrivateChat", "Created ChatMessage with recipientId=$recipientId")
+
+                val result = sendChatMessageUseCase(message)
+
+                if (result.isSuccess) {
+                    Log.d("PrivateChat", "Text message sent successfully via UseCase: ${message.id}")
+                    onSuccess()
+                } else {
+                    val error = result.exceptionOrNull() ?: Exception("Unknown error")
+                    Log.e("PrivateChat", "Failed to send message via UseCase", error)
+                    onError(error as? Exception ?: Exception(error.message))
+                }
             } catch (e: Exception) {
                 Log.e("PrivateChat", "Error sending text message: ${e.message}", e)
                 onError(e)
@@ -648,7 +656,6 @@ private fun sendMessage(
         onError(Exception(errorMsg))
     }
 }
-
 private fun sendOrganization(
     currentUser: com.google.firebase.auth.FirebaseUser?,
     conversationId: String,
@@ -703,11 +710,11 @@ private fun sendOrganization(
                 Log.d("PrivateChat", "Conversation document created/updated: $conversationId")
 
                 // Add organization message to sub-collection
-                val message = Message(
+                val message = ChatMessage(
                     id = invitationId,
                     senderId = currentUser.uid,
                     recipientId = recipientId,
-                    content = "Shared an organization",
+                    text = "Shared an organization",
                     timestamp = System.currentTimeMillis(),
                     type = "organization",
                     orgId = orgId

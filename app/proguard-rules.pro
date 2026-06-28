@@ -78,5 +78,16 @@
 -renamesourcefileattribute SourceFile
 -keepattributes SourceFile,LineNumberTable
 
+# =============================================
+# FCM & Notification Sending
+# =============================================
+-keep class com.google.firebase.messaging.** { *; }
+-keep class com.phoenixcorp.founderfinder.data.repository.ChatRepositoryImpl { *; }
+-keepclassmembers class com.phoenixcorp.founderfinder.data.repository.ChatRepositoryImpl { *; }
+
+# Allow FirebaseMessaging.send() to work after R8
+-dontwarn com.google.firebase.messaging.FirebaseMessaging
+-keep class com.google.firebase.messaging.RemoteMessage { *; }
+-keep class com.google.firebase.messaging.RemoteMessage$Builder { *; }
 # Optional: Uncomment during debugging to see what is being removed
 # -printmapping mapping.txt

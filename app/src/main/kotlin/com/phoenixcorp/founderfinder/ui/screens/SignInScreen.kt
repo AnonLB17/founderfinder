@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,13 +16,17 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun SignInScreen(
     navController: NavHostController,
-    authViewModel: AuthViewModel = hiltViewModel()   // Changed to hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -29,6 +34,7 @@ fun SignInScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    val firestore = FirebaseFirestore.getInstance()
 
     Column(
         modifier = Modifier
@@ -76,10 +82,12 @@ fun SignInScreen(
                 isLoading = true
                 errorMessage = null
 
-                // Fixed: Explicit parameter types
                 authViewModel.signInUser(email, password) { success: Boolean, message: String? ->
                     isLoading = false
                     if (success) {
+                        // FCM Setup on successful login
+                        setupFcmNotifications()
+
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.SignIn.route) { inclusive = true }
                         }
@@ -102,6 +110,39 @@ fun SignInScreen(
             }
         }
     }
+}
+
+private fun setupFcmNotifications() {
+    val currentUser = FirebaseAuth.getInstance().currentUser ?: return
+    val firestore = FirebaseFirestore.getInstance()
+
+    // Get and save FCM Token
+    FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+        if (task.isSuccessful) {
+            val token = task.result
+            firestore.collection("users").document(currentUser.uid)
+                .update("fcmToken", token)
+                .addOnSuccessListener {
+                    Log.d("FCM", "✅ FCM Token saved for user ${currentUser.uid}")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("FCM", "Failed to save FCM token", e)
+                }
+        } else {
+            Log.e("FCM", "Failed to get FCM token", task.exception)
+        }
+    }
+
+    // Subscribe to personal topic
+    val topic = "user_${currentUser.uid}"
+    FirebaseMessaging.getInstance().subscribeToTopic(topic)
+        .addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                Log.d("FCM", "✅ Subscribed to topic: $topic")
+            } else {
+                Log.e("FCM", "Failed to subscribe to topic", task.exception)
+            }
+        }
 }
 
 @Preview(showBackground = true)

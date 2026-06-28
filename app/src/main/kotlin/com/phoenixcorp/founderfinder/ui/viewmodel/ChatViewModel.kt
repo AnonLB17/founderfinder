@@ -30,7 +30,11 @@ class ChatViewModel @Inject constructor(
 
     fun sendMessage(message: ChatMessage) {
         viewModelScope.launch {
-            sendChatMessageUseCase(message)
+            val result = sendChatMessageUseCase(message)
+            if (result.isFailure) {
+                // TODO: Show error to user (Snackbar, etc.)
+                // You can expose a error state flow if needed
+            }
         }
     }
 }

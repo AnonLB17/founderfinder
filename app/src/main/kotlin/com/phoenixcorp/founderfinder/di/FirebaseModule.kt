@@ -6,8 +6,14 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.storage
+import com.phoenixcorp.founderfinder.data.repository.NotificationRepositoryImpl
 import com.phoenixcorp.founderfinder.data.repository.ProfileRepositoryImpl
+import com.phoenixcorp.founderfinder.data.repository.ThreadRepositoryImpl
+import com.phoenixcorp.founderfinder.domain.repository.ForumRepository
+import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
 import com.phoenixcorp.founderfinder.domain.repository.ProfileRepository
+import com.phoenixcorp.founderfinder.domain.repository.ThreadRepository
+import com.phoenixcorp.founderfinder.domain.usecase.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -37,5 +43,60 @@ object FirebaseModule {
         firestore: FirebaseFirestore
     ): ProfileRepository = ProfileRepositoryImpl(firestore)
 
-    // You can add more repositories here later (e.g. OrganizationRepository)
+    @Provides
+    @Singleton
+    fun provideNotificationRepository(
+        firestore: FirebaseFirestore
+    ): NotificationRepository = NotificationRepositoryImpl(firestore)
+
+    // ====================== USE CASES ======================
+    @Provides
+    @Singleton
+    fun provideGetUnreadNotificationsUseCase(
+        repository: NotificationRepository
+    ): GetUnreadNotificationsUseCase = GetUnreadNotificationsUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideGetAllNotificationsUseCase(
+        repository: NotificationRepository
+    ): GetAllNotificationsUseCase = GetAllNotificationsUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideSendPrivateChatNotificationUseCase(
+        repository: NotificationRepository
+    ): SendPrivateChatNotificationUseCase = SendPrivateChatNotificationUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideCreateThreadNotificationUseCase(
+        repository: NotificationRepository
+    ): CreateThreadNotificationUseCase = CreateThreadNotificationUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideCreateCommentNotificationUseCase(
+        repository: NotificationRepository
+    ): CreateCommentNotificationUseCase = CreateCommentNotificationUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideSendFileShareNotificationUseCase(
+        repository: NotificationRepository
+    ): SendFileShareNotificationUseCase = SendFileShareNotificationUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideCreateThreadUseCase(
+        threadRepository: ThreadRepository,
+        createThreadNotificationUseCase: CreateThreadNotificationUseCase
+    ): CreateThreadUseCase = CreateThreadUseCase(threadRepository, createThreadNotificationUseCase)
+
+    @Provides
+    @Singleton
+    fun provideCreateCommentUseCase(
+        forumRepository: ForumRepository,
+        createCommentNotificationUseCase: CreateCommentNotificationUseCase
+    ): CreateCommentUseCase = CreateCommentUseCase(forumRepository, createCommentNotificationUseCase)
 }

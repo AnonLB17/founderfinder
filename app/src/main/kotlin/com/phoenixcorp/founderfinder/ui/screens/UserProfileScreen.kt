@@ -17,6 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.phoenixcorp.founderfinder.R
+import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.ui.viewmodel.ProfileViewModel
@@ -49,7 +50,11 @@ fun UserProfileScreen(
                     )
                 },
                 navController = navController,
-                showBackButton = true
+                showBackButton = true,
+                showMailButton = true,           // ← Enabled
+                onMailClick = {
+                    navController.navigate(Screen.PrivateMessages.route)  // Navigate to Messages
+                }
             )
         },
         bottomBar = { BottomNavigationBar(navController) }
@@ -97,16 +102,12 @@ fun UserProfileScreen(
 
                             Spacer(modifier = Modifier.height(32.dp))
 
-                            // Matching Firestore field names
                             ProfileSection(title = "Ambition Statement") {
                                 Text(user.ambitionStatement ?: "Not provided")
                             }
 
-                            // === UPDATED FOUNDER STATUS SECTION ===
                             ProfileSection(title = "Founder Status") {
-                                val isFounder = user.isFounder ?: false   // Force fallback
-
-                                Log.d("DEBUG_PROFILE", "isFounder from model = $isFounder | founderEntries size = ${user.founderEntries.size}")
+                                val isFounder = user.isFounder ?: false
 
                                 if (isFounder) {
                                     Text(
@@ -117,19 +118,13 @@ fun UserProfileScreen(
 
                                     if (user.founderEntries.isNotEmpty()) {
                                         user.founderEntries.forEach { entry ->
-                                            Text(
-                                                text = "• $entry",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
+                                            Text("• $entry", style = MaterialTheme.typography.bodyLarge)
                                         }
                                     } else {
                                         Text("Founder (No startup details provided)")
                                     }
                                 } else {
-                                    Text(
-                                        text = "Not a founder yet",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                                    Text("Not a founder yet", style = MaterialTheme.typography.bodyLarge)
                                 }
                             }
 

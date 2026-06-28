@@ -53,4 +53,10 @@ abstract class RepositoryModule {
     abstract fun bindMatchRepository(
         impl: MatchRepositoryImpl
     ): MatchRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindThreadRepository(
+        impl: ThreadRepositoryImpl
+    ): ThreadRepository
 }

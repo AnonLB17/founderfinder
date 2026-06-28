@@ -22,8 +22,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.phoenixcorp.founderfinder.R
+import com.phoenixcorp.founderfinder.domain.model.ChatMessage
 import com.phoenixcorp.founderfinder.domain.model.Conversation
-import com.phoenixcorp.founderfinder.domain.model.Message
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
@@ -82,7 +82,7 @@ fun PrivateMessagesScreen(navController: NavHostController) {
                         .limit(1)
                         .get()
                         .await()
-                    val lastMessage = messageSnapshot.documents.firstOrNull()?.toObject(Message::class.java)
+                    val lastMessage = messageSnapshot.documents.firstOrNull()?.toObject(ChatMessage::class.java)
 
                     // Fetch recipient profile
                     try {
@@ -121,7 +121,7 @@ fun PrivateMessagesScreen(navController: NavHostController) {
                         val conversation = Conversation(
                             recipientId = otherUserId,
                             recipientName = recipientName,
-                            lastMessage = lastMessage?.content,
+                            lastMessage = lastMessage?.text,
                             timestamp = lastMessage?.timestamp,
                             profilePicture = profile?.profilePicture
                         )

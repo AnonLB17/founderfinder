@@ -7,103 +7,49 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.phoenixcorp.founderfinder.MainActivity
 import com.phoenixcorp.founderfinder.R
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
     private val TAG = "FCM"
 
-    override fun onNewToken(token: String) {
-        super.onNewToken(token)
-        Log.d(TAG, "New token: $token")
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: run {
-            Log.w(TAG, "No user logged in, cannot save token")
-            return
-        }
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
-                    .document(userId)
-                    .set(
-                        mapOf(
-                            "fcmToken" to token,
-                            "updatedAt" to System.currentTimeMillis()
-                        ),
-                        SetOptions.merge()
-                    )
-                    .await()
-                Log.d(TAG, "Token saved for user: $userId")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save token for user $userId: ${e.message}", e)
-            }
-        }
-    }
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        super.onMessageReceived(remoteMessage)
+        Log.d(TAG, "📩 FCM Received. Full Data: ${remoteMessage.data}")
 
-    override fun onMessageReceived(message: RemoteMessage) {
-        super.onMessageReceived(message)
-        Log.d(TAG, "Message received: ${message.data}")
-        Log.d(TAG, "Notification payload: ${message.notification?.toString()}")
-        Log.d(TAG, "From: ${message.from}, MessageId: ${message.messageId}, Priority: ${message.priority}")
+        val data = remoteMessage.data
 
-        message.notification?.let {
-            Log.d(TAG, "Notification: title=${it.title}, body=${it.body}, data=${message.data}")
-            sendNotification(
-                it.title ?: "FounderFinder",
-                it.body ?: "New event received",
-                message.data["screen"],
-                message.data["id"],
-                message.data["senderId"],
-                message.data["notificationId"],
-                message.data["content"],
-                message.data["recipientId"],
-                message.data["type"]
-            )
-        } ?: run {
-            Log.w(TAG, "No notification payload, processing data-only message")
-            sendNotification(
-                message.data["title"] ?: "FounderFinder",
-                message.data["body"] ?: "New event received",
-                message.data["screen"],
-                message.data["id"],
-                message.data["senderId"],
-                message.data["notificationId"],
-                message.data["content"],
-                message.data["recipientId"],
-                message.data["type"]
-            )
-        }
+        val senderName = data["senderName"] ?: remoteMessage.notification?.title ?: "Unknown"
+        val title = data["title"] ?: "New Activity from $senderName"
+        val body = data["body"] ?: remoteMessage.notification?.body ?: "New update"
+
+        val screen = data["screen"] ?: data["type"] ?: ""
+        val chatId = data["chatId"]
+        val forumId = data["forumId"]
+        val category = data["category"]
+        val threadId = data["threadId"]
+
+        Log.d(TAG, "Processing: screen=$screen, forumId=$forumId, category=$category")
+
+        sendNotification(title, body, screen, chatId, forumId, category, threadId)
     }
 
     private fun sendNotification(
         title: String,
         body: String,
-        screen: String?,
-        id: String?,
-        senderId: String?,
-        notificationId: String?,
-        content: String?,
-        recipientId: String?,
-        type: String?
+        screen: String,
+        chatId: String?,
+        forumId: String?,
+        category: String?,
+        threadId: String?
     ) {
         val channelId = "founderfinder_notifications"
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "FounderFinder Notifications",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
+            val channel = NotificationChannel(channelId, "FounderFinder Notifications", NotificationManager.IMPORTANCE_HIGH).apply {
                 enableVibration(true)
                 setShowBadge(true)
             }
@@ -111,48 +57,32 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val intent = Intent(this, MainActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra("screen", screen)
-            putExtra("id", id)
-            putExtra("senderId", senderId)
-            putExtra("notificationId", notificationId)
-            putExtra("content", content)
-            putExtra("recipientId", recipientId)
-            putExtra("type", type)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            chatId?.let { putExtra("chatId", it) }
+            forumId?.let { putExtra("forumId", it) }
+            category?.let { putExtra("category", it) }
+            threadId?.let { putExtra("threadId", it) }
         }
 
-        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            PendingIntent.getActivity(
-                this,
-                notificationId?.hashCode() ?: System.currentTimeMillis().toInt(),
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        } else {
-            PendingIntent.getActivity(
-                this,
-                notificationId?.hashCode() ?: System.currentTimeMillis().toInt(),
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        }
+        val requestCode = (chatId ?: forumId ?: threadId ?: "default").hashCode()
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ff_logo)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
             .build()
 
-        Log.d(TAG, "Sending notification: title=$title, body=$body, screen=$screen, id=$id, senderId=$senderId, type=$type, recipientId=$recipientId")
-        try {
-            notificationManager.notify(notificationId?.hashCode() ?: System.currentTimeMillis().toInt(), notification)
-            Log.d(TAG, "Notification sent successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send notification: ${e.message}", e)
-        }
+        notificationManager.notify(requestCode, notification)
+        Log.d(TAG, "🔔 Notification displayed: $title")
     }
 }

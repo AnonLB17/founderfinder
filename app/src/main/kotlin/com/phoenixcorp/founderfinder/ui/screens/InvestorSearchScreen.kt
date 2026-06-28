@@ -143,12 +143,7 @@ fun InvestorSearchScreen(navController: NavHostController) {
                 title = { Text("Investor Search") },
                 navController = navController,
                 showBackButton = true,
-                showInvestorAddButton = true,
-                showMailButton = true,
-                onMailClick = {
-                    Log.d("InvestorSearchScreen", "Navigating to PrivateMessagesScreen")
-                    navController.navigate(Screen.PrivateMessages.route)
-                }
+                showInvestorAddButton = true
             )
         },
         bottomBar = { BottomNavigationBar(navController) }

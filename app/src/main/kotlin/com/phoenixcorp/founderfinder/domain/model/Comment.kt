@@ -10,5 +10,12 @@ data class Comment(
     val parentId: String? = null,
     val depth: Int = 0,
     val isFavorited: Boolean? = false,
-    val likes: Long? = 0
+    val likes: Long? = 0,
+
+    // Important fields for navigation and Firestore path
+    val threadId: String = "",
+    val forumId: String = "",
+    val category: String = "marketpotential",  // e.g. "requestedsolutions"
+
+    val location: String? = null
 )

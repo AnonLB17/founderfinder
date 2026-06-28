@@ -13,6 +13,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ViewModelComponent
 import dagger.hilt.android.scopes.ViewModelScoped
+import jakarta.inject.Singleton
 
 @Module
 @InstallIn(ViewModelComponent::class)
@@ -51,8 +52,11 @@ object UseCaseModule {
     @Provides
     @ViewModelScoped
     fun provideSendChatMessageUseCase(
-        chatRepository: ChatRepository
-    ): SendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
+        chatRepository: ChatRepository,
+        sendPrivateChatNotificationUseCase: SendPrivateChatNotificationUseCase   // ← Added
+    ): SendChatMessageUseCase {
+        return SendChatMessageUseCase(chatRepository, sendPrivateChatNotificationUseCase)
+    }
 
     @Provides
     @ViewModelScoped

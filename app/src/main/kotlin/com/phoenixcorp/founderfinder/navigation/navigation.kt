@@ -1,7 +1,9 @@
 package com.phoenixcorp.founderfinder.navigation
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -16,10 +18,15 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.google.firebase.auth.FirebaseAuth
 import com.phoenixcorp.founderfinder.ui.theme.FounderfinderTheme
 import com.phoenixcorp.founderfinder.ui.screens.AdvisorSearchFeatureScreen
 import com.phoenixcorp.founderfinder.ui.screens.AdvisorSignUpScreen
@@ -47,6 +54,7 @@ import com.phoenixcorp.founderfinder.ui.screens.LocalIssuesScreen
 import com.phoenixcorp.founderfinder.ui.screens.LocationSelectionScreen
 import com.phoenixcorp.founderfinder.ui.screens.MarketPotentialScreen
 import com.phoenixcorp.founderfinder.ui.screens.NationalIssuesScreen
+import com.phoenixcorp.founderfinder.ui.screens.NotificationsScreen
 import com.phoenixcorp.founderfinder.ui.screens.OrganizationDetailsScreen
 import com.phoenixcorp.founderfinder.ui.screens.OrganizationFilesScreen
 import com.phoenixcorp.founderfinder.ui.screens.OrganizationsOfInterestScreen
@@ -64,6 +72,7 @@ import com.phoenixcorp.founderfinder.ui.screens.SelectUserTypeScreen
 import com.phoenixcorp.founderfinder.ui.screens.SignInScreen
 import com.phoenixcorp.founderfinder.ui.screens.SignUpScreen
 import com.phoenixcorp.founderfinder.ui.screens.SplashScreen
+import com.phoenixcorp.founderfinder.ui.screens.ThreadScreen
 import com.phoenixcorp.founderfinder.ui.screens.UserInfoScreen
 import com.phoenixcorp.founderfinder.ui.screens.UserProfileScreen
 import com.phoenixcorp.founderfinder.ui.screens.WorkExperienceScreen
@@ -85,7 +94,7 @@ fun AppNavGraph(
                     modifier = modifier.padding(paddingValues)
                 ) {
                     composable(Screen.Splash.route) {
-                        SplashScreen(navController)
+                        ImprovedSplashScreen(navController)   // Use the improved version
                     }
                     composable(Screen.SignUp.route) {
                         SignUpScreen(navController)
@@ -131,6 +140,37 @@ fun AppNavGraph(
                     }
                     composable(Screen.Home.route) {
                         HomeScreen(navController)
+                    }
+                    composable(Screen.Notifications.route) {
+                        NotificationsScreen(navController = navController)
+                    }
+                    composable(
+                        route = Screen.InstitutionForum.route,
+                        arguments = Screen.InstitutionForum.arguments
+                    ) { backStackEntry ->
+                        ForumTemplateScreen(
+                            navController = navController,
+                            institutionName = "${backStackEntry.arguments?.getString("category")}/${backStackEntry.arguments?.getString("forumId")}"
+                        )
+                    }
+                    composable(
+                        route = "thread/{category}/{forumId}/{threadId}",
+                        arguments = listOf(
+                            navArgument("category") { type = NavType.StringType },
+                            navArgument("forumId") { type = NavType.StringType },
+                            navArgument("threadId") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val category = backStackEntry.arguments?.getString("category") ?: "requestedsolutions"
+                        val forumId = backStackEntry.arguments?.getString("forumId") ?: ""
+                        val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
+
+                        ThreadScreen(
+                            threadId = threadId,
+                            forumId = forumId,
+                            category = category,
+                            navController = navController
+                        )
                     }
                     composable(Screen.Partners.route) {
                         PartnersScreen(navController)
@@ -285,6 +325,31 @@ fun AppNavGraph(
     }
 }
 
+// Improved SplashScreen with Auth Check
+@Composable
+fun ImprovedSplashScreen(navController: NavHostController) {
+    LaunchedEffect(Unit) {
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            navController.navigate(Screen.Home.route) {
+                popUpTo(Screen.Splash.route) { inclusive = true }
+            }
+        } else {
+            navController.navigate(Screen.SignIn.route) {
+                popUpTo(Screen.Splash.route) { inclusive = true }
+            }
+        }
+    }
+
+    // Loading UI while deciding where to go
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("Loading FounderFinder...")
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenWithHeader(navController: NavHostController, title: String, content: @Composable () -> Unit) {

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.FirebaseAuth
@@ -31,6 +32,7 @@ import com.phoenixcorp.founderfinder.domain.model.Forum
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
+import com.phoenixcorp.founderfinder.ui.viewmodel.notifications.NotificationsViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
@@ -38,7 +40,10 @@ import java.time.ZoneId
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun HomeScreen(navController: NavHostController) {
+fun HomeScreen(
+    navController: NavHostController,
+    notificationsViewModel: NotificationsViewModel = hiltViewModel()
+) {
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
@@ -49,6 +54,11 @@ fun HomeScreen(navController: NavHostController) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val philosophy = getPhilosophyOfTheDay()
+
+    // Load notifications (updated method)
+    LaunchedEffect(Unit) {
+        notificationsViewModel.loadAllNotifications()
+    }
 
     // Fetch trending forums
     LaunchedEffect(Unit) {
@@ -100,7 +110,21 @@ fun HomeScreen(navController: NavHostController) {
     }
 
     Scaffold(
-        topBar = { ScreenBanner(title = { Text("Home") }) },
+        topBar = {
+            ScreenBanner(
+                title = { Text("Home") },
+                navController = navController,
+                showNotifications = true,
+                showLogout = true,                    // ← Shows logout on left
+                onLogoutClick = {
+                    FirebaseAuth.getInstance().signOut()
+                    navController.navigate(Screen.SignIn.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
+                    Toast.makeText(context, "Signed out successfully", Toast.LENGTH_SHORT).show()
+                }
+            )
+        },
         bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         LazyColumn(
@@ -183,7 +207,7 @@ fun HomeScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Apply to top Canadian startup programs and funding opportunities tailored for founders like you.")
                         Spacer(modifier = Modifier.height(12.dp))
-                        Button(onClick = { /* TODO: Navigate to opportunities screen */ }, modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { /* TODO */ }, modifier = Modifier.fillMaxWidth()) {
                             Text("Explore Opportunities")
                         }
                     }

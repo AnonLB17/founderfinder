@@ -21,6 +21,7 @@ sealed class Screen(val route: String, val arguments: List<androidx.navigation.N
     object IndustryPreferences : Screen("industry_preferences")
     object PortfolioAndTerms : Screen("portfolio_and_terms")
     object Home : Screen("home")
+    object Notifications : Screen("notifications")
     object Partners : Screen("partners")
     object FindPartners : Screen("find_partners")
     object IdeaDevelopment : Screen("idea_development")

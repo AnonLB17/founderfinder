@@ -34,7 +34,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.R
-import com.phoenixcorp.founderfinder.domain.model.Message
+import com.phoenixcorp.founderfinder.domain.model.ChatMessage
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
@@ -52,7 +52,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
     val context = LocalContext.current
     val currentUser = auth.currentUser
     var messageText by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
+    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var userProfiles by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
     var orgName by remember { mutableStateOf("Loading...") }
     var isLoading by remember { mutableStateOf(true) }
@@ -173,7 +173,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                     if (snapshot != null) {
                         val newMessages = snapshot.documents.mapNotNull { doc ->
                             try {
-                                doc.toObject(Message::class.java)?.copy(id = doc.id)
+                                doc.toObject(ChatMessage::class.java)?.copy(id = doc.id)
                             } catch (e: Exception) {
                                 Log.e("GroupChat", "Error parsing message ${doc.id}: ${e.message}")
                                 null
@@ -187,7 +187,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                         Log.w("GroupChat", "Message snapshot is null for orgId: $orgId")
                         errorMessage = "No messages found"
                         isLoading = false
-                        hasError = false // Allow UI to show empty chat
+                        hasError = false
                     }
                 }
         } catch (e: Exception) {
@@ -331,7 +331,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                                     )
                                 }
                                 Text(
-                                    text = message.content,
+                                    text = message.text,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
@@ -482,10 +482,10 @@ private fun sendGroupMessage(
                 Log.d("GroupChat", "Participants for notification: $participantIds")
 
                 // Add message to sub-collection
-                val message = Message(
+                val message = ChatMessage(
                     id = UUID.randomUUID().toString(),
                     senderId = currentUser.uid,
-                    content = messageText,
+                    text = messageText,
                     timestamp = System.currentTimeMillis(),
                     type = "text",
                     orgId = orgId
