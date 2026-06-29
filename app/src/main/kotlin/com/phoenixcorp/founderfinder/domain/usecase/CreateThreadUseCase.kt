@@ -2,12 +2,12 @@ package com.phoenixcorp.founderfinder.domain.usecase
 
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import com.phoenixcorp.founderfinder.domain.repository.ThreadRepository
-import com.google.firebase.auth.FirebaseAuth
 import javax.inject.Inject
 
 class CreateThreadUseCase @Inject constructor(
-    private val threadRepository: ThreadRepository,           // Changed to ThreadRepository
-    private val createThreadNotificationUseCase: CreateThreadNotificationUseCase
+    private val threadRepository: ThreadRepository
+    // Notification use case commented out for now to prevent duplicates
+    // private val createThreadNotificationUseCase: CreateThreadNotificationUseCase
 ) {
 
     suspend operator fun invoke(
@@ -22,18 +22,17 @@ class CreateThreadUseCase @Inject constructor(
             if (result.isSuccess) {
                 val threadId = result.getOrNull() ?: thread.id
 
-                val currentUser = FirebaseAuth.getInstance().currentUser
-
-                if (thread.creatorId != forumOwnerId && currentUser != null) {
-                    createThreadNotificationUseCase(
-                        forumOwnerId = forumOwnerId,
-                        creatorId = currentUser.uid,
-                        creatorName = currentUser.displayName ?: "Unknown",
-                        threadId = threadId,
-                        forumId = forumId,
-                        category = category
-                    )
-                }
+                // TODO: Re-enable notifications after fixing sender name + duplicate issue
+                // if (thread.creatorId != forumOwnerId) {
+                //     createThreadNotificationUseCase(
+                //         forumOwnerId = forumOwnerId,
+                //         creatorId = thread.creatorId,
+                //         creatorName = thread.creatorName,
+                //         threadId = threadId,
+                //         forumId = forumId,
+                //         category = category
+                //     )
+                // }
             }
 
             result

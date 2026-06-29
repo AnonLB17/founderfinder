@@ -16,9 +16,9 @@ import com.phoenixcorp.founderfinder.domain.repository.ThreadRepository
 import com.phoenixcorp.founderfinder.domain.usecase.*
 import dagger.Module
 import dagger.Provides
-import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import dagger.hilt.InstallIn
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -89,9 +89,9 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideCreateThreadUseCase(
-        threadRepository: ThreadRepository,
-        createThreadNotificationUseCase: CreateThreadNotificationUseCase
-    ): CreateThreadUseCase = CreateThreadUseCase(threadRepository, createThreadNotificationUseCase)
+        threadRepository: ThreadRepository
+        // Notification use case temporarily removed to stop duplicates
+    ): CreateThreadUseCase = CreateThreadUseCase(threadRepository)
 
     @Provides
     @Singleton

@@ -17,7 +17,7 @@ class SendPrivateChatNotificationUseCase @Inject constructor(
             senderId = message.senderId,
             senderName = senderName,
             type = "new_message",
-            title = "New Message from $senderName",
+            title = "New Message",
             body = message.text.take(120),
             chatId = message.chatId,
             forumId = null,

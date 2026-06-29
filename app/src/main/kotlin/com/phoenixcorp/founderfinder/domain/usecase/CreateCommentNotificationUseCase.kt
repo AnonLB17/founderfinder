@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.domain.usecase
 
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
 import javax.inject.Inject
 
@@ -9,7 +10,7 @@ class CreateCommentNotificationUseCase @Inject constructor(
     suspend operator fun invoke(
         threadOwnerId: String,
         commenterId: String,
-        commenterName: String,
+        commenterName: String,        // fallback
         commentText: String,
         threadId: String,
         commentId: String? = null,
@@ -21,12 +22,12 @@ class CreateCommentNotificationUseCase @Inject constructor(
         notificationRepository.createNotification(
             userId = threadOwnerId,
             senderId = commenterId,
-            senderName = commenterName,
+            senderName = commenterName,           // Repository will improve it with profile data
             type = type,
             title = title,
             body = commentText.take(100),
             chatId = null,
-            forumId = null,           // Add these
+            forumId = null,
             threadId = threadId,
             commentId = commentId,
             messageId = null,

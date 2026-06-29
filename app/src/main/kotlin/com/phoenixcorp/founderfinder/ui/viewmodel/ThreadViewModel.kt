@@ -3,12 +3,11 @@ package com.phoenixcorp.founderfinder.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.toObject
-import com.google.firebase.firestore.ktx.toObjects
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.model.Thread
-import com.phoenixcorp.founderfinder.domain.repository.ThreadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,9 +17,10 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 @HiltViewModel
-class ThreadViewModel @Inject constructor(
-    private val threadRepository: ThreadRepository
-) : ViewModel() {
+class ThreadViewModel @Inject constructor() : ViewModel() {
+
+    private val firestore = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
 
     private val _thread = MutableStateFlow<Thread?>(null)
     val thread: StateFlow<Thread?> = _thread.asStateFlow()
@@ -28,78 +28,98 @@ class ThreadViewModel @Inject constructor(
     private val _comments = MutableStateFlow<List<Comment>>(emptyList())
     val comments: StateFlow<List<Comment>> = _comments.asStateFlow()
 
-    fun loadThread(category: String, forumId: String, threadId: String) {
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    // Persistent favorite cache (survives navigation)
+    private val favoritedCache = mutableSetOf<String>()
+
+    private fun loadUserFavorites() {
+        val userId = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                Log.d("ThreadViewModel", "🔍 Loading thread from: /category/$category/forum/$forumId/threads/$threadId")
-
-                val doc = FirebaseFirestore.getInstance()
-                    .collection("category")
-                    .document(category)
-                    .collection("forum")
-                    .document(forumId)
-                    .collection("threads")
-                    .document(threadId)
-                    .get()
-                    .await()
-
-                if (doc.exists()) {
-                    val data = doc.data ?: emptyMap<String, Any>()
-
-                    val loadedThread = Thread(
-                        id = doc.id,
-                        forumId = forumId,
-                        category = category,
-                        creatorId = data["creatorId"] as? String ?: "",
-                        creatorName = data["creatorName"] as? String ?: "Anonymous",
-                        creatorProfilePicture = data["creatorProfilePicture"] as? String ?: "",
-                        message = data["message"] as? String ?: "[No message]",
-                        timestamp = (data["timestamp"] as? Long) ?: System.currentTimeMillis(),
-                        likes = (data["likes"] as? Long) ?: 0L,
-                        isFavorited = (data["favorited"] as? Boolean) ?: false,   // Note: "favorited" not "isFavorited"
-                        institutionName = data["institutionName"] as? String ?: forumId,
-                        imageUrl = data["imageUrl"] as? String,
-                        location = data["location"] as? String,
-                        topicHeader = data["topicHeader"] as? String
-                    )
-
-                    _thread.value = loadedThread
-                    Log.d("ThreadViewModel", "✅ Thread loaded successfully: \"${loadedThread.message}\" by ${loadedThread.creatorName}")
-                } else {
-                    Log.e("ThreadViewModel", "❌ Document does not exist")
-                }
-
-                loadComments(category, forumId, threadId)
+                val userDoc = firestore.collection("profiles").document(userId).get().await()
+                val favorites = userDoc.get("favoritedComments") as? List<String> ?: emptyList()
+                favoritedCache.clear()
+                favoritedCache.addAll(favorites)
+                Log.d("ThreadViewModel", "Loaded ${favorites.size} user favorites from profile")
             } catch (e: Exception) {
-                Log.e("ThreadViewModel", "💥 Failed to load thread", e)
+                Log.e("ThreadViewModel", "Failed to load user favorites", e)
             }
         }
     }
 
-    private fun loadComments(category: String, forumId: String, threadId: String) {
+    fun loadThread(category: String, forumId: String, threadId: String) {
         viewModelScope.launch {
+            _isLoading.value = true
             try {
-                Log.d("ThreadViewModel", "Loading comments for thread: $threadId")
+                Log.d("ThreadViewModel", "Trying to load thread: category=$category, forum=$forumId, thread=$threadId")
 
-                val snapshot = FirebaseFirestore.getInstance()
-                    .collection("category")
+                // Load user favorites once
+                if (favoritedCache.isEmpty()) loadUserFavorites()
+
+                var threadDoc = firestore.collection("forums")
                     .document(category)
-                    .collection("forum")
+                    .collection("forums")
                     .document(forumId)
                     .collection("threads")
                     .document(threadId)
-                    .collection("comments")
-                    .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.ASCENDING)
                     .get()
                     .await()
 
-                val loadedComments = snapshot.toObjects<Comment>()
-                _comments.value = loadedComments
+                if (!threadDoc.exists()) {
+                    Log.w("ThreadViewModel", "Not found in /forums/... Trying /category/... path")
+                    threadDoc = firestore.collection("category")
+                        .document(category)
+                        .collection("forum")
+                        .document(forumId)
+                        .collection("threads")
+                        .document(threadId)
+                        .get()
+                        .await()
+                }
 
-                Log.d("ThreadViewModel", "✅ Loaded ${loadedComments.size} comments successfully")
+                if (threadDoc.exists()) {
+                    _thread.value = threadDoc.toObject(Thread::class.java)
+                    Log.d("ThreadViewModel", "✅ Thread loaded successfully!")
+                } else {
+                    Log.e("ThreadViewModel", "Thread still not found!")
+                }
+
+                val baseRef = if (threadDoc.exists() &&
+                    firestore.collection("category").document(category).collection("forum").document(forumId).collection("threads").document(threadId).get().await().exists()) {
+                    firestore.collection("category")
+                        .document(category)
+                        .collection("forum")
+                        .document(forumId)
+                        .collection("threads")
+                        .document(threadId)
+                } else {
+                    firestore.collection("forums")
+                        .document(category)
+                        .collection("forums")
+                        .document(forumId)
+                        .collection("threads")
+                        .document(threadId)
+                }
+
+                val commentsSnapshot = baseRef
+                    .collection("comments")
+                    .orderBy("timestamp")
+                    .get()
+                    .await()
+
+                _comments.value = commentsSnapshot.toObjects(Comment::class.java).map { raw ->
+                    val isFav = favoritedCache.contains(raw.id) || (raw.isFavorited == true)
+                    raw.copy(isFavorited = isFav)
+                }
+
+                Log.d("ThreadViewModel", "✅ Loaded ${commentsSnapshot.size()} comments from comments subcollection")
+
             } catch (e: Exception) {
-                Log.e("ThreadViewModel", "Failed to load comments for thread $threadId", e)
-                _comments.value = emptyList()
+                Log.e("ThreadViewModel", "Error loading thread or comments", e)
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -107,20 +127,115 @@ class ThreadViewModel @Inject constructor(
     fun createComment(comment: Comment) {
         viewModelScope.launch {
             try {
-                val result = threadRepository.createComment(comment)
-                if (result.isSuccess) {
-                    Log.d("ThreadViewModel", "✅ Comment created successfully: ${comment.id}")
-                    // Refresh comments
-                    loadComments(
-                        comment.category.ifBlank { "marketpotential" },
-                        comment.forumId,
-                        comment.threadId
-                    )
-                } else {
-                    Log.e("ThreadViewModel", "❌ Failed to create comment", result.exceptionOrNull())
-                }
+                val category = comment.category.ifBlank { "requestedsolutions" }
+
+                firestore.collection("category")
+                    .document(category)
+                    .collection("forum")
+                    .document(comment.forumId)
+                    .collection("threads")
+                    .document(comment.threadId)
+                    .collection("comments")
+                    .document(comment.id)
+                    .set(comment)
+                    .await()
+
+                loadThread(category, comment.forumId, comment.threadId)
+                Log.d("ThreadViewModel", "✅ Comment created successfully")
             } catch (e: Exception) {
-                Log.e("ThreadViewModel", "Error creating comment", e)
+                Log.e("ThreadViewModel", "Failed to create comment", e)
+            }
+        }
+    }
+
+    fun likeComment(commentId: String) {
+        viewModelScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: return@launch
+            val thread = _thread.value ?: return@launch
+            val category = thread.category.ifBlank { "requestedsolutions" }
+
+            try {
+                val commentRef = firestore.collection("category")
+                    .document(category)
+                    .collection("forum")
+                    .document(thread.forumId)
+                    .collection("threads")
+                    .document(thread.id)
+                    .collection("comments")
+                    .document(commentId)
+
+                val commentSnap = commentRef.get().await()
+                val likedBy = commentSnap.get("likedBy") as? List<String> ?: emptyList()
+
+                val isCurrentlyLiked = likedBy.contains(currentUserId)
+
+                if (isCurrentlyLiked) {
+                    commentRef.update(
+                        mapOf(
+                            "likes" to FieldValue.increment(-1),
+                            "likedBy" to FieldValue.arrayRemove(currentUserId)
+                        )
+                    ).await()
+                    Log.d("ThreadViewModel", "Unliked comment: $commentId")
+                } else {
+                    commentRef.update(
+                        mapOf(
+                            "likes" to FieldValue.increment(1),
+                            "likedBy" to FieldValue.arrayUnion(currentUserId)
+                        )
+                    ).await()
+                    Log.d("ThreadViewModel", "Liked comment: $commentId")
+                }
+
+                loadThread(category, thread.forumId, thread.id)
+            } catch (e: Exception) {
+                Log.e("ThreadViewModel", "Failed to toggle like", e)
+            }
+        }
+    }
+
+    fun favoriteComment(commentId: String, isFavoriting: Boolean) {
+        viewModelScope.launch {
+            val thread = _thread.value ?: return@launch
+            val category = thread.category.ifBlank { "requestedsolutions" }
+            val userId = auth.currentUser?.uid ?: return@launch
+
+            try {
+                // Update local cache
+                if (isFavoriting) {
+                    favoritedCache.add(commentId)
+                } else {
+                    favoritedCache.remove(commentId)
+                }
+
+                // Optimistic UI update
+                _comments.value = _comments.value.map { comment ->
+                    if (comment.id == commentId) comment.copy(isFavorited = isFavoriting) else comment
+                }
+
+                // Update comment document
+                val commentRef = firestore.collection("category")
+                    .document(category)
+                    .collection("forum")
+                    .document(thread.forumId)
+                    .collection("threads")
+                    .document(thread.id)
+                    .collection("comments")
+                    .document(commentId)
+
+                commentRef.update("isFavorited", isFavoriting).await()
+
+                // Persist to user profile for permanence
+                val userRef = firestore.collection("profiles").document(userId)
+                if (isFavoriting) {
+                    userRef.update("favoritedComments", FieldValue.arrayUnion(commentId)).await()
+                } else {
+                    userRef.update("favoritedComments", FieldValue.arrayRemove(commentId)).await()
+                }
+
+                Log.d("ThreadViewModel", "✅ Toggled favorite: $commentId -> $isFavoriting (persisted permanently)")
+            } catch (e: Exception) {
+                Log.e("ThreadViewModel", "Failed to favorite comment", e)
             }
         }
     }

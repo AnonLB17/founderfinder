@@ -18,9 +18,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import com.phoenixcorp.founderfinder.navigation.Screen
@@ -32,7 +32,9 @@ import java.util.*
 @Composable
 fun ThreadCard(
     thread: Thread,
-    navController: NavHostController
+    navController: NavHostController,
+    onFavorite: (String, Boolean) -> Unit = { _, _ -> },
+    onLike: (String) -> Unit = { }
 ) {
     var creatorFullName by remember { mutableStateOf(thread.creatorName) }
     var creatorProfilePicture by remember { mutableStateOf<String?>(null) }
@@ -55,7 +57,6 @@ fun ThreadCard(
                     val lastName = profileDoc.getString("lastName") ?: ""
                     creatorFullName = "$firstName $lastName".trim().ifEmpty { "Anonymous" }
                     creatorProfilePicture = profileDoc.getString("profilePicture")
-
                     Log.d("ThreadCard", "Profile loaded: $creatorFullName")
                 }
             } catch (e: Exception) {
@@ -79,7 +80,7 @@ fun ThreadCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header: Avatar + Name + Time
+            // Header: Avatar + Name + Time + Favorite
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
                     painter = creatorProfilePicture?.let { rememberAsyncImagePainter(it) }
@@ -110,7 +111,11 @@ fun ThreadCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = { /* TODO: Favorite */ }) {
+
+                // Favorite Button
+                IconButton(onClick = {
+                    onFavorite(thread.id, !thread.isFavorited)
+                }) {
                     Icon(
                         imageVector = if (thread.isFavorited) Icons.Default.Star else Icons.Default.StarBorder,
                         contentDescription = "Favorite",
@@ -130,21 +135,18 @@ fun ThreadCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { /* TODO: Like */ }) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Like",
-                            tint = if (thread.likes > 0) Color.Red else Color.Gray
-                        )
-                    }
-                    Text("${thread.likes}", style = MaterialTheme.typography.bodyMedium)
+            // Like Button
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val isLikedByMe = thread.likedBy.contains(FirebaseAuth.getInstance().currentUser?.uid)
+
+                IconButton(onClick = { onLike(thread.id) }) {
+                    Icon(
+                        Icons.Default.Favorite,
+                        contentDescription = "Like",
+                        tint = if (isLikedByMe) Color.Red else Color.Gray
+                    )
                 }
+                Text("${thread.likes}", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

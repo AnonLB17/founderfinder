@@ -23,7 +23,6 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.messaging.FirebaseMessaging
 import com.phoenixcorp.founderfinder.navigation.AppNavGraph
 import com.phoenixcorp.founderfinder.navigation.Screen
@@ -41,15 +40,9 @@ class MainActivity : ComponentActivity() {
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
-    private var messageListener: ListenerRegistration? = null
-    private var invitationListener: ListenerRegistration? = null
-    private var threadListener: ListenerRegistration? = null
-    private var commentListener: ListenerRegistration? = null
-    private var activityListeners: List<ListenerRegistration> = emptyList()
-
     private lateinit var navController: NavHostController
     private lateinit var snackbarHostState: SnackbarHostState
-    private lateinit var notificationsViewModel: NotificationsViewModel   // ← Added
+    private lateinit var notificationsViewModel: NotificationsViewModel
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -72,19 +65,16 @@ class MainActivity : ComponentActivity() {
 
         val firebaseAppCheck = FirebaseAppCheck.getInstance()
         firebaseAppCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
-        Log.d("MainActivity", "Using DebugAppCheckProviderFactory")
 
-        // Set up Compose
         setContent {
             FounderfinderTheme {
                 snackbarHostState = remember { SnackbarHostState() }
                 navController = rememberNavController()
-                notificationsViewModel = hiltViewModel()   // ← Inject here
+                notificationsViewModel = hiltViewModel()
                 AppNavGraph(navController = navController, snackbarHostState = snackbarHostState)
             }
         }
 
-        // Delay navigation and intent handling
         Handler(Looper.getMainLooper()).postDelayed({
             checkAuthAndNavigate()
             handleIntent(intent)
@@ -115,24 +105,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        if (auth.currentUser != null) {
-            setupFirestoreListeners()
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        messageListener?.remove()
-        invitationListener?.remove()
-        threadListener?.remove()
-        commentListener?.remove()
-        activityListeners.forEach { it.remove() }
-        Log.d("MainActivity", "Firestore listeners removed")
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -142,43 +114,57 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         val extras = intent?.extras ?: return
-        val screen = extras.getString("screen") ?: extras.getString("type") ?: return
-        val id = extras.getString("id") ?: extras.getString("chatId") ?: extras.getString("forumId")
-        val notificationId = extras.getString("notificationId")
+        val screen = extras.getString("screen") ?: extras.getString("type") ?: ""
+        val threadId = extras.getString("threadId")
+        val forumId = extras.getString("forumId")
         val category = extras.getString("category")
+        val chatId = extras.getString("chatId")
+        val notificationId = extras.getString("notificationId")
 
-        Log.d("MainActivity", "handleIntent → screen=$screen, id=$id, category=$category, notificationId=$notificationId")
+        Log.d("MainActivity", "handleIntent → screen=$screen, threadId=$threadId, forumId=$forumId, category=$category")
 
-        // Mark as read
+        // Mark notification as read if ID is provided
         if (!notificationId.isNullOrEmpty()) {
             notificationsViewModel.markAsRead(notificationId)
         }
 
-        when (screen) {
-            "PrivateChat", "chat", "chat_message" -> {
-                id?.let { navController.navigate("private_chat/$it") }
-            }
-            "GroupChat" -> id?.let { navController.navigate("group_chat/$it") }
-
-            // FIXED Forum Navigation
-            "ForumTemplate", "new_thread", "forum", "institution_forum" -> {
-                val forumId = extras.getString("forumId") ?: id
-                val category = extras.getString("category") ?: "marketpotential"
-
-                if (forumId != null) {
-                    val route = "institution_forum/$category/$forumId"
-                    Log.d("MainActivity", "✅ Navigating to forum: $route")
-                    navController.navigate(route) {
-                        launchSingleTop = true
-                    }
-                } else {
-                    Log.w("MainActivity", "No forumId found for forum navigation")
+        when {
+            // === THREAD / COMMENT NAVIGATION ===
+            threadId != null && forumId != null -> {
+                val cat = category ?: "requestedsolutions"
+                val route = "thread/$cat/$forumId/$threadId"
+                Log.d("MainActivity", "✅ Navigating to Thread: $route")
+                navController.navigate(route) {
+                    launchSingleTop = true
                 }
             }
 
-            "OrganizationDetails" -> id?.let { navController.navigate("organization_details/$it") }
+            // === FORUM NAVIGATION ===
+            screen in listOf("ForumTemplate", "new_thread", "forum", "institution_forum") || forumId != null -> {
+                val forumIdSafe = forumId ?: extras.getString("id")
+                val cat = category ?: "marketpotential"
 
-            else -> Log.w("MainActivity", "Unknown screen type: $screen")
+                if (forumIdSafe != null) {
+                    val route = "institution_forum/$cat/$forumIdSafe"
+                    Log.d("MainActivity", "✅ Navigating to Forum: $route")
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                }
+            }
+
+            // === CHAT NAVIGATION ===
+            chatId != null || screen in listOf("PrivateChat", "chat", "chat_message") -> {
+                chatId?.let {
+                    navController.navigate("private_chat/$it") {
+                        launchSingleTop = true
+                    }
+                }
+            }
+
+            else -> {
+                Log.w("MainActivity", "Unknown navigation type: $screen")
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.phoenixcorp.founderfinder.domain.usecase
 
 import android.util.Log
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
 import javax.inject.Inject
 
@@ -25,7 +26,7 @@ class CreateThreadNotificationUseCase @Inject constructor(
             senderId = creatorId,
             senderName = creatorName,
             type = "new_thread",
-            title = "New Thread by $creatorName",
+            title = "New Thread",
             body = "A new thread was created in your forum",
             chatId = null,
             forumId = forumId,

@@ -111,3 +111,17 @@ fun User.toUserProfile(): UserProfile {
         }
     )
 }
+
+// ====================== NOTIFICATION HELPER ======================
+
+/**
+ * Helper to create sender info for Notifications from UserProfile
+ */
+fun UserProfile.toNotificationSender(): Pair<String, String> {
+    val fullName = listOfNotNull(firstName, lastName)
+        .joinToString(" ")
+        .trim()
+        .ifBlank { "Unknown User" }
+
+    return Pair(fullName, firstName ?: "")
+}

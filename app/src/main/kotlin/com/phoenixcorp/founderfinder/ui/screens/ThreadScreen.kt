@@ -44,7 +44,7 @@ import java.util.UUID
 fun ThreadScreen(
     threadId: String,
     forumId: String,
-    category: String = "marketpotential",
+    category: String = "requestedsolutions",  // Default fallback
     navController: NavHostController
 ) {
     val viewModel: ThreadViewModel = hiltViewModel()
@@ -58,11 +58,12 @@ fun ThreadScreen(
 
     val expandedComments = remember { mutableStateMapOf<String, Boolean>() }
 
-    // Load thread
-    LaunchedEffect(forumId, threadId) {
+    // Load thread using the passed category
+    LaunchedEffect(category, forumId, threadId) {
         if (forumId.isNotBlank() && threadId.isNotBlank()) {
-            val correctCategory = "requestedsolutions"
-            viewModel.loadThread(correctCategory, forumId, threadId)
+            val finalCategory = category.ifBlank { "requestedsolutions" }
+            Log.d("ThreadScreen", "Loading thread with category: $finalCategory, forumId: $forumId, threadId: $threadId")
+            viewModel.loadThread(finalCategory, forumId, threadId)
         }
     }
 
@@ -83,7 +84,7 @@ fun ThreadScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // === PINNED ORIGINAL THREAD (Clickable to Reply) ===
+            // === PINNED ORIGINAL THREAD ===
             thread?.let { t ->
                 var displayName by remember { mutableStateOf(t.creatorName ?: "Anonymous") }
                 var displayProfilePic by remember { mutableStateOf<String?>(null) }
@@ -112,10 +113,7 @@ fun ThreadScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(0.dp)
-                        .clickable {
-                            // Clicking the pinned thread starts a top-level reply
-                            replyToId = null
-                        },
+                        .clickable { replyToId = null },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -170,11 +168,23 @@ fun ThreadScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
+            // === SORTED COMMENTS: Favorited First ===
+            val sortedComments = remember(comments) {
+                comments.sortedWith(
+                    compareByDescending<Comment> { it.isActuallyFavorited }
+                        .thenByDescending { it.timestamp }
+                        .thenByDescending { it.likes ?: 0 }
+                )
+            }
+
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                items(comments.filter { it.parentId == null }) { rootComment ->
+                items(
+                    items = sortedComments.filter { it.parentId == null },
+                    key = { "${it.id}_${it.isFavorited}_${it.likes}" }   // ← This forces refresh
+                ) { rootComment ->
                     CommentCard(
                         comment = rootComment,
                         depth = 0,
@@ -186,8 +196,10 @@ fun ThreadScreen(
                             expandedComments[id] = expand
                         },
                         onReplyToComment = { id -> replyToId = id },
-                        onFavorite = { _, _ -> },
-                        onLike = { },
+                        onFavorite = { commentId, isFavoriting ->
+                            viewModel.favoriteComment(commentId, isFavoriting)
+                        },
+                        onLike = { commentId -> viewModel.likeComment(commentId) },
                         navController = navController
                     )
                 }
@@ -241,7 +253,7 @@ fun ThreadScreen(
     }
 }
 
-// postComment function (unchanged)
+// postComment function
 private fun postComment(
     inputText: String,
     threadId: String,
@@ -271,7 +283,7 @@ private fun postComment(
             timestamp = System.currentTimeMillis(),
             threadId = threadId,
             forumId = forumId,
-            category = category,
+            category = category.ifBlank { "requestedsolutions" },
             parentId = parentId,
             depth = if (parentId == null) 1 else 2
         )

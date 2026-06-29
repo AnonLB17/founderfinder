@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,15 +23,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.model.Thread
-import com.phoenixcorp.founderfinder.domain.model.UserProfile
-import com.phoenixcorp.founderfinder.domain.usecase.CreateThreadUseCase
 import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.ui.components.ThreadCard
@@ -44,13 +44,14 @@ fun ForumTemplateScreen(
     navController: NavHostController,
     institutionName: String,
     modifier: Modifier = Modifier,
-    viewModel: ForumViewModel = hiltViewModel()           // ← Add this
+    viewModel: ForumViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val firestore = Firebase.firestore
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
+
     var inputText by remember { mutableStateOf("") }
     var threads by remember { mutableStateOf<List<Thread>>(emptyList()) }
     var commentsByThread by remember { mutableStateOf<Map<String, List<Comment>>>(emptyMap()) }
@@ -61,12 +62,15 @@ fun ForumTemplateScreen(
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var forumTitle by remember { mutableStateOf("Forum") }
+    var forumDescription by remember { mutableStateOf("No description available.") }   // ← Added
+    var forumLocation by remember { mutableStateOf<String?>(null) }                   // ← Added
     var forumOwnerId by remember { mutableStateOf<String?>(null) }
+
     val scrollState = rememberScrollState()
     val defaultAvatarUrl = "https://via.placeholder.com/150"
 
-    // Parse institutionName for category, forumId, and location
-    val (category, forumId, location) = if (institutionName.contains(" -> ")) {
+    // Parse institutionName
+    val (category, forumId, locationParam) = if (institutionName.contains(" -> ")) {
         val parts = institutionName.split(" -> ")
         Triple(parts[0].lowercase(), parts[1], parts.getOrNull(2))
     } else {
@@ -74,13 +78,9 @@ fun ForumTemplateScreen(
         Triple(parts[0].lowercase(), parts.getOrNull(1) ?: institutionName.lowercase(), null)
     }
 
-    // Fetch forum owner ID
+    // Fetch forum metadata (title, description, location, owner)
     LaunchedEffect(category, forumId) {
         try {
-            Log.d(
-                "ForumTemplateScreen",
-                "Fetching forum owner from: /category/$category/forum/$forumId"
-            )
             val forumDoc = firestore.collection("category")
                 .document(category)
                 .collection("forum")
@@ -88,22 +88,105 @@ fun ForumTemplateScreen(
                 .get()
                 .await()
 
-            forumTitle =
-                forumDoc.getString("name")?.replaceFirstChar { it.uppercase() } ?: "Untitled Forum"
+            forumTitle = forumDoc.getString("name")?.replaceFirstChar { it.uppercase() } ?: "Untitled Forum"
+            forumDescription = forumDoc.getString("description")
+                ?: forumDoc.getString("about")
+                        ?: "No description available for this forum."
+            forumLocation = forumDoc.getString("location") ?: locationParam
             forumOwnerId = forumDoc.getString("creatorId")
 
-            Log.d("ForumTemplateScreen", "Fetched forumOwnerId: $forumOwnerId")
+            Log.d("ForumTemplateScreen", "Loaded forum - Location: $forumLocation")
         } catch (e: Exception) {
-            Log.e("ForumTemplateScreen", "Error fetching forum owner: ${e.message}", e)
-            forumOwnerId = null
+            Log.e("ForumTemplateScreen", "Error fetching forum metadata", e)
         }
     }
-    // Fetch threads
-    LaunchedEffect(category, forumId, location) {
-        Log.d(
-            "ForumTemplateScreen",
-            "LaunchedEffect triggered for category=$category, forumId=$forumId, location=$location"
-        )
+
+    // Thread Action Callbacks
+    val onThreadFavorite: (String, Boolean) -> Unit = { threadId, isFavoriting ->
+        coroutineScope.launch {
+            try {
+                val threadRef = firestore.collection("category")
+                    .document(category)
+                    .collection("forum")
+                    .document(forumId)
+                    .collection("threads")
+                    .document(threadId)
+
+                threadRef.update("isFavorited", isFavoriting).await()
+
+                threads = threads.map { thread ->
+                    if (thread.id == threadId) thread.copy(isFavorited = isFavoriting) else thread
+                }
+            } catch (e: Exception) {
+                Log.e("ForumTemplateScreen", "Failed to update thread favorite", e)
+            }
+        }
+    }
+
+    val onThreadLike: (String) -> Unit = { threadId ->
+        coroutineScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: return@launch
+            try {
+                val threadRef = firestore.collection("category")
+                    .document(category)
+                    .collection("forum")
+                    .document(forumId)
+                    .collection("threads")
+                    .document(threadId)
+
+                val snap = threadRef.get().await()
+                val likedBy = snap.get("likedBy") as? List<String> ?: emptyList()
+
+                if (likedBy.contains(currentUserId)) {
+                    threadRef.update(
+                        mapOf(
+                            "likes" to FieldValue.increment(-1),
+                            "likedBy" to FieldValue.arrayRemove(currentUserId)
+                        )
+                    ).await()
+                } else {
+                    threadRef.update(
+                        mapOf(
+                            "likes" to FieldValue.increment(1),
+                            "likedBy" to FieldValue.arrayUnion(currentUserId)
+                        )
+                    ).await()
+                }
+            } catch (e: Exception) {
+                Log.e("ForumTemplateScreen", "Failed to toggle thread like", e)
+            }
+        }
+    }
+
+    // Post new thread
+    fun postContent() {
+        if (inputText.isBlank() || currentUser == null) return
+
+        coroutineScope.launch {
+            try {
+                if (selectedThreadId == null) {
+                    viewModel.createThread(
+                        message = inputText,
+                        forumId = forumId,
+                        category = category,
+                        forumOwnerId = forumOwnerId ?: ""
+                    )
+                } else {
+                    Log.d("ForumTemplateScreen", "Comment posting not implemented yet")
+                }
+
+                inputText = ""
+                selectedThreadId = null
+                selectedCommentId = null
+            } catch (e: Exception) {
+                Log.e("ForumTemplateScreen", "Failed to post content", e)
+                Toast.makeText(context, "Failed to post: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Fetch threads (keep your existing LaunchedEffect for threads)
+    LaunchedEffect(category, forumId, locationParam) {
         if (currentUser == null) {
             errorMessage = "You must be logged in to view the forum."
             isLoading = false
@@ -113,153 +196,60 @@ fun ForumTemplateScreen(
             }
             return@LaunchedEffect
         }
+
         try {
-            currentUser.getIdToken(true).await()
-            Log.d(
-                "ForumTemplateScreen",
-                "Fetching threads from: /category/$category/forum/$forumId/threads"
-            )
             firestore.collection("category")
                 .document(category)
                 .collection("forum")
                 .document(forumId)
                 .collection("threads")
                 .apply {
-                    if (location != null) whereEqualTo("location", location)
+                    if (locationParam != null) whereEqualTo("location", locationParam)
                 }
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Log.e(
-                            "ForumTemplateScreen",
-                            "Snapshot listener error: ${error.message}",
-                            error
-                        )
-                        errorMessage = "Failed to load threads: ${error.message}"
+                        Log.e("ForumTemplateScreen", "Snapshot listener error", error)
+                        errorMessage = "Failed to load threads"
                         isLoading = false
                         return@addSnapshotListener
                     }
-                    Log.d(
-                        "ForumTemplateScreen",
-                        "Snapshot received: documentCount=${snapshot?.documents?.size}"
-                    )
-                    if (snapshot != null) {
-                        threads = snapshot.documents.mapNotNull { doc ->
-                            try {
-                                val data = doc.data ?: return@mapNotNull null
-                                Thread(
-                                    id = doc.id,
-                                    forumId = forumId,                    // ← Critical
-                                    category = category,                  // ← Critical
-                                    creatorId = data["creatorId"] as? String ?: "",
-                                    creatorName = data["creatorName"] as? String ?: "Anonymous",
-                                    creatorProfilePicture = data["creatorProfilePicture"] as? String
-                                        ?: defaultAvatarUrl,
-                                    message = data["message"] as? String ?: "",
-                                    timestamp = (data["timestamp"] as? Long) ?: 0L,
-                                    likes = (data["likes"] as? Long) ?: 0L,
-                                    isFavorited = data["isFavorited"] as? Boolean ?: false,
-                                    institutionName = forumId,
-                                    imageUrl = data["imageUrl"] as? String,
-                                    location = data["location"] as? String,
-                                    topicHeader = data["topicHeader"] as? String
-                                )
-                            } catch (e: Exception) {
-                                Log.e(
-                                    "ForumTemplateScreen",
-                                    "Error parsing thread ${doc.id}: ${e.message}",
-                                    e
-                                )
-                                null
-                            }
-                        }.sortedByDescending { it.timestamp }
-                        isLoading = false
-                        Log.d("ForumTemplateScreen", "Fetched ${threads.size} threads")
-                    } else {
-                        Log.w("ForumTemplateScreen", "Thread snapshot is null")
-                        isLoading = false
-                    }
+
+                    threads = snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            val data = doc.data ?: return@mapNotNull null
+                            Thread(
+                                id = doc.id,
+                                forumId = forumId,
+                                category = category,
+                                creatorId = data["creatorId"] as? String ?: "",
+                                creatorName = data["creatorName"] as? String ?: "Anonymous",
+                                creatorProfilePicture = data["creatorProfilePicture"] as? String ?: defaultAvatarUrl,
+                                message = data["message"] as? String ?: "",
+                                timestamp = (data["timestamp"] as? Long) ?: 0L,
+                                likes = (data["likes"] as? Long) ?: 0L,
+                                likedBy = (data["likedBy"] as? List<String>) ?: emptyList(),
+                                isFavorited = data["isFavorited"] as? Boolean ?: false,
+                                institutionName = forumId,
+                                imageUrl = data["imageUrl"] as? String,
+                                location = data["location"] as? String,
+                                topicHeader = data["topicHeader"] as? String
+                            )
+                        } catch (e: Exception) {
+                            Log.e("ForumTemplateScreen", "Error parsing thread ${doc.id}", e)
+                            null
+                        }
+                    }?.sortedWith(
+                        compareByDescending<Thread> { it.isFavorited }
+                            .thenByDescending { it.timestamp }
+                            .thenByDescending { it.likes }
+                    ) ?: emptyList()
+
+                    isLoading = false
                 }
         } catch (e: Exception) {
-            Log.e("ForumTemplateScreen", "Error initializing threads: ${e.message}", e)
-            errorMessage = "Failed to load threads: ${e.message}"
+            Log.e("ForumTemplateScreen", "Error initializing threads", e)
+            errorMessage = "Failed to load threads"
             isLoading = false
-        }
-    }
-
-    // Fetch comments for selected thread
-    LaunchedEffect(selectedThreadId) {
-        if (selectedThreadId != null) {
-            try {
-                firestore.collection("category")
-                    .document(category)
-                    .collection("forum")
-                    .document(forumId)
-                    .collection("threads")
-                    .document(selectedThreadId!!)
-                    .collection("comments")
-                    .addSnapshotListener { snapshot, error ->
-                        if (error != null) {
-                            Log.e(
-                                "ForumTemplateScreen",
-                                "Error fetching comments: ${error.message}",
-                                error
-                            )
-                            errorMessage = "Failed to load comments: ${error.message}"
-                            return@addSnapshotListener
-                        }
-                        Log.d(
-                            "ForumTemplateScreen",
-                            "Comment snapshot received: threadId=$selectedThreadId, documentCount=${snapshot?.documents?.size}"
-                        )
-                        if (snapshot != null) {
-                            val newComments = snapshot.documents.mapNotNull { doc ->
-                                try {
-                                    val data = doc.data ?: return@mapNotNull null
-                                    Comment(
-                                        id = doc.id,
-                                        creatorId = data["creatorId"] as? String ?: "",
-                                        creatorName = data["creatorName"] as? String ?: "Anonymous",
-                                        creatorProfilePicture = data["creatorProfilePicture"] as? String
-                                            ?: defaultAvatarUrl,
-                                        message = data["message"] as? String ?: "",
-                                        timestamp = (data["timestamp"] as? Long) ?: 0L,
-                                        parentId = data["parentId"] as? String,
-                                        depth = (data["depth"] as? Long)?.toInt() ?: 1,
-                                        isFavorited = data["isFavorited"] as? Boolean ?: false,
-                                        likes = (data["likes"] as? Long) ?: 0L
-                                    )
-                                } catch (e: Exception) {
-                                    Log.e(
-                                        "ForumTemplateScreen",
-                                        "Error parsing comment ${doc.id}: ${e.message}",
-                                        e
-                                    )
-                                    null
-                                }
-                            }
-                            commentsByThread = commentsByThread.toMutableMap().apply {
-                                this[selectedThreadId!!] = newComments
-                            }
-                            Log.d(
-                                "ForumTemplateScreen",
-                                "Fetched ${newComments.size} comments for thread $selectedThreadId"
-                            )
-                        } else {
-                            Log.w(
-                                "ForumTemplateScreen",
-                                "Comment snapshot is null for thread $selectedThreadId"
-                            )
-                            commentsByThread = commentsByThread.toMutableMap().apply {
-                                this[selectedThreadId!!] = emptyList()
-                            }
-                        }
-                    }
-            } catch (e: Exception) {
-                Log.e("ForumTemplateScreen", "Error initializing comments: ${e.message}", e)
-                errorMessage = "Failed to load comments: ${e.message}"
-            }
-        } else {
-            commentsByThread = emptyMap()
         }
     }
 
@@ -284,390 +274,120 @@ fun ForumTemplateScreen(
                 }
         ) {
             if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else if (errorMessage != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center
-                    )
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error)
                 }
             } else {
+                // === PINNED FORUM HEADER WITH LOCATION ===
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = forumDescription,
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
+
+                        forumLocation?.let { loc ->
+                            if (loc.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = "Location",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = loc,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Threads List
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = { selectedThreadId = null; selectedCommentId = null },
-                                onDoubleTap = { selectedThreadId = null; selectedCommentId = null }
-                            )
-                        }
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(8.dp)
                 ) {
-                    if (isLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (errorMessage != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = errorMessage!!,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center
+                    if (threads.isEmpty()) {
+                        Text(
+                            text = "No threads yet. Start a conversation!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    threads
+                        .sortedWith(
+                            compareByDescending<Thread> { it.isFavorited }
+                                .thenByDescending { it.timestamp }
+                                .thenByDescending { it.likes }
+                        )
+                        .forEach { thread ->
+                            ThreadCard(
+                                thread = thread.copy(
+                                    creatorName = thread.creatorName.takeIf { !it.isNullOrBlank() } ?: "Anonymous",
+                                    creatorProfilePicture = thread.creatorProfilePicture.takeIf { !it.isNullOrBlank() } ?: defaultAvatarUrl
+                                ),
+                                navController = navController,
+                                onFavorite = onThreadFavorite,
+                                onLike = onThreadLike
                             )
                         }
-                    } else {
-                        // === FLOATING FORUM DESCRIPTION CARD ===
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp),   // Slight padding for floating effect
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ),
-                            shape = RoundedCornerShape(16.dp),   // Rounded corners
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)  // Floating shadow
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                var forumDescription by remember { mutableStateOf("") }
+                }
 
-                                LaunchedEffect(forumId, category) {
-                                    try {
-                                        val forumDoc = Firebase.firestore
-                                            .collection("category")
-                                            .document(category)
-                                            .collection("forum")
-                                            .document(forumId)
-                                            .get()
-                                            .await()
-
-                                        forumDescription = forumDoc.getString("description")
-                                            ?: forumDoc.getString("about")
-                                                    ?: "No description available for this forum."
-                                    } catch (e: Exception) {
-                                        Log.e("ForumTemplateScreen", "Error fetching forum description", e)
-                                        forumDescription = "No description available for this forum."
-                                    }
-                                }
-
-                                Text(
-                                    text = forumDescription,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        // Scrollable content with threads
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState)
-                                .padding(8.dp)
-                        ) {
-                            if (threads.isEmpty()) {
-                                Text(
-                                    text = "No threads yet. Start a conversation!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                            threads.forEach { thread ->
-                                ThreadCard(
-                                    thread = thread.copy(
-                                        creatorName = thread.creatorName.takeIf { !it.isNullOrBlank() }
-                                            ?: "Anonymous",
-                                        creatorProfilePicture = thread.creatorProfilePicture.takeIf { !it.isNullOrBlank() }
-                                            ?: defaultAvatarUrl
-                                    ),
-                                    navController = navController
-                                )
-                            }
-                        }
-
-                        // Bottom input field
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = inputText,
-                                onValueChange = { inputText = it },
-                                label = { Text(if (selectedThreadId == null) "Start a new thread" else if (selectedCommentId == null) "Add a comment" else "Reply to comment") },
-                                modifier = Modifier.weight(1f),
-                                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(onSend = {
-                                    if (inputText.isBlank()) {
-                                        Toast.makeText(
-                                            context,
-                                            "Input cannot be empty",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        return@KeyboardActions
-                                    }
-
-                                    if (selectedThreadId == null) {
-                                        // NEW THREAD — Do nothing here (only Post Button creates)
-                                        Toast.makeText(
-                                            context,
-                                            "Use the Post button to create a thread",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        // Comment creation (keep)
-                                        coroutineScope.launch {
-                                            val currentUser = auth.currentUser ?: return@launch
-                                            val comment = Comment(
-                                                id = UUID.randomUUID().toString(),
-                                                creatorId = currentUser.uid,
-                                                creatorName = "You",
-                                                creatorProfilePicture = defaultAvatarUrl,
-                                                message = inputText,
-                                                timestamp = System.currentTimeMillis(),
-                                                parentId = selectedCommentId,
-                                                depth = if (selectedCommentId == null) 1 else (commentsByThread[selectedThreadId]?.find { it.id == selectedCommentId }?.depth?.plus(
-                                                    1
-                                                ) ?: 1),
-                                                isFavorited = false,
-                                                likes = 0
-                                            )
-                                            firestore.collection("category")
-                                                .document(category)
-                                                .collection("forum")
-                                                .document(forumId)
-                                                .collection("threads")
-                                                .document(selectedThreadId!!)
-                                                .collection("comments")
-                                                .document(comment.id)
-                                                .set(comment)
-                                                .await()
-                                            commentsByThread =
-                                                commentsByThread.toMutableMap().apply {
-                                                    this[selectedThreadId!!] =
-                                                        (this[selectedThreadId!!]
-                                                            ?: emptyList()) + comment
-                                                }
-                                            Toast.makeText(
-                                                context,
-                                                "Comment posted successfully",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-
-                                    inputText = ""
-                                    selectedCommentId = null
-                                })
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    Log.d("ForumTemplateScreen", "=== POST BUTTON CLICKED ===")
-                                    Log.d(
-                                        "ForumTemplateScreen",
-                                        "selectedThreadId = $selectedThreadId"
-                                    )
-                                    Log.d("ForumTemplateScreen", "inputText = '$inputText'")
-
-                                    coroutineScope.launch {
-                                        try {
-                                            val currentUser = auth.currentUser
-                                            if (currentUser == null) {
-                                                Log.e("ForumTemplateScreen", "No current user")
-                                                Toast.makeText(
-                                                    context,
-                                                    "Please sign in to post",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                return@launch
-                                            }
-
-                                            if (inputText.isBlank()) {
-                                                Log.w("ForumTemplateScreen", "Input is blank")
-                                                Toast.makeText(
-                                                    context,
-                                                    "Input cannot be empty",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                return@launch
-                                            }
-
-                                            Log.d(
-                                                "ForumTemplateScreen",
-                                                "Creating thread with text: ${inputText.take(50)}"
-                                            )
-
-                                            val profileDoc = firestore.collection("users")
-                                                .document(currentUser.uid)
-                                                .get()
-                                                .await()
-                                            val profile =
-                                                profileDoc.toObject(UserProfile::class.java)
-                                            val creatorName = when {
-                                                profile?.firstName.isNullOrBlank() && profile?.lastName.isNullOrBlank() -> "Anonymous"
-                                                profile?.firstName.isNullOrBlank() -> profile?.lastName
-                                                    ?: "Anonymous"
-
-                                                profile?.lastName.isNullOrBlank() -> profile?.firstName
-                                                    ?: "Anonymous"
-
-                                                else -> "${profile?.firstName} ${profile?.lastName}"
-                                            }
-                                            val creatorProfilePicture =
-                                                profile?.profilePicture?.takeIf { it.isNotBlank() }
-                                                    ?: defaultAvatarUrl
-
-                                            if (selectedThreadId == null) {
-                                                if (forumOwnerId == null) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Could not determine forum owner",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                    return@launch
-                                                }
-
-                                                Log.d(
-                                                    "ForumTemplateScreen",
-                                                    "Creating new thread with owner: $forumOwnerId"
-                                                )
-
-                                                // ONLY call ViewModel
-                                                viewModel.createThread(
-                                                    message = inputText,
-                                                    forumId = forumId,
-                                                    category = category,
-                                                    forumOwnerId = forumOwnerId!!
-                                                )
-
-                                                // Inside the Post Button onClick → if (selectedThreadId == null) block
-
-                                                // Optimistic UI update
-                                                val newThreadId = UUID.randomUUID().toString()
-                                                val newThread = Thread(
-                                                    id = newThreadId,
-                                                    forumId = forumId,
-                                                    category = category,
-                                                    creatorId = currentUser.uid,
-                                                    creatorName = creatorName,
-                                                    creatorProfilePicture = creatorProfilePicture,
-                                                    message = inputText,
-                                                    timestamp = System.currentTimeMillis(),
-                                                    likes = 0,
-                                                    isFavorited = false,
-                                                    institutionName = forumId,
-                                                    location = location,
-                                                    topicHeader = null
-                                                )
-
-                                                threads = threads + newThread
-                                                selectedThreadId = newThreadId
-                                                showCommentsMap =
-                                                    showCommentsMap.toMutableMap().apply {
-                                                        this[newThreadId] = true
-                                                    }
-                                                Toast.makeText(
-                                                    context,
-                                                    "Thread created successfully",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            } else {
-                                                // Comment creation (unchanged)
-                                                val comment = Comment(
-                                                    id = UUID.randomUUID().toString(),
-                                                    creatorId = currentUser.uid,
-                                                    creatorName = creatorName,
-                                                    creatorProfilePicture = creatorProfilePicture,
-                                                    message = inputText,
-                                                    timestamp = System.currentTimeMillis(),
-                                                    parentId = selectedCommentId,
-                                                    depth = if (selectedCommentId == null) 1 else (commentsByThread[selectedThreadId]?.find { it.id == selectedCommentId }?.depth?.plus(
-                                                        1
-                                                    ) ?: 1),
-                                                    isFavorited = false,
-                                                    likes = 0
-                                                )
-                                                firestore.collection("category")
-                                                    .document(category)
-                                                    .collection("forum")
-                                                    .document(forumId)
-                                                    .collection("threads")
-                                                    .document(selectedThreadId!!)
-                                                    .collection("comments")
-                                                    .document(comment.id)
-                                                    .set(comment)
-                                                    .await()
-                                                commentsByThread =
-                                                    commentsByThread.toMutableMap().apply {
-                                                        this[selectedThreadId!!] =
-                                                            (this[selectedThreadId!!]
-                                                                ?: emptyList()) + comment
-                                                    }
-                                                Toast.makeText(
-                                                    context,
-                                                    "Comment posted successfully",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-
-                                            inputText = ""
-                                            selectedCommentId = null
-                                        } catch (e: Exception) {
-                                            Log.e(
-                                                "ForumTemplateScreen",
-                                                "Error posting: ${e.message}",
-                                                e
-                                            )
-                                            Toast.makeText(
-                                                context,
-                                                "Error posting: ${e.message}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                },
-                                enabled = inputText.isNotBlank()
-                            ) {
-                                Text("Post")
-                            }
-                        }
+                // Bottom Input Field
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        label = { Text(if (selectedThreadId == null) "Start a new thread" else "Add a comment") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            if (inputText.isNotBlank()) postContent()
+                        })
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { postContent() },
+                        enabled = inputText.isNotBlank()
+                    ) {
+                        Text("Post")
                     }
                 }
             }

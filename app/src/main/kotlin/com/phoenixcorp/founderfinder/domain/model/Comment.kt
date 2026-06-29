@@ -11,11 +11,15 @@ data class Comment(
     val depth: Int = 0,
     val isFavorited: Boolean? = false,
     val likes: Long? = 0,
+    val likedBy: List<String> = emptyList(),
 
-    // Important fields for navigation and Firestore path
     val threadId: String = "",
     val forumId: String = "",
-    val category: String = "marketpotential",  // e.g. "requestedsolutions"
+    val category: String = "marketpotential",
 
     val location: String? = null
-)
+) {
+    // This helps with Firestore deserialization issues
+    val isActuallyFavorited: Boolean
+        get() = isFavorited == true
+}

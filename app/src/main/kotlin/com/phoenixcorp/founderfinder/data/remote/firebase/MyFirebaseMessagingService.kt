@@ -58,14 +58,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+
             putExtra("screen", screen)
+            putExtra("type", screen)           // Important: pass type as well
             chatId?.let { putExtra("chatId", it) }
             forumId?.let { putExtra("forumId", it) }
             category?.let { putExtra("category", it) }
             threadId?.let { putExtra("threadId", it) }
         }
 
-        val requestCode = (chatId ?: forumId ?: threadId ?: "default").hashCode()
+        val requestCode = (threadId ?: chatId ?: forumId ?: "default").hashCode()
+
         val pendingIntent = PendingIntent.getActivity(
             this,
             requestCode,
@@ -83,6 +86,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .build()
 
         notificationManager.notify(requestCode, notification)
-        Log.d(TAG, "🔔 Notification displayed: $title")
+        Log.d(TAG, "🔔 Notification displayed → screen=$screen, threadId=$threadId")
     }
 }

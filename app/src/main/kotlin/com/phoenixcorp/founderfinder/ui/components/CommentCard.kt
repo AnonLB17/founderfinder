@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.navigation.Screen
@@ -77,11 +78,9 @@ fun CommentCard(
         border = if (depth > 0 && showReplies)
             BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         else null,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(1.dp)) {   // Your preferred padding
+        Column(modifier = Modifier.padding(1.dp)) {
             // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
@@ -111,11 +110,16 @@ fun CommentCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = { onFavorite(comment.id, !(comment.isFavorited ?: false)) }) {
+
+                // Favorite Button
+                IconButton(onClick = {
+                    val newState = !(comment.isActuallyFavorited)
+                    onFavorite(comment.id, newState)
+                }) {
                     Icon(
-                        if (comment.isFavorited == true) Icons.Default.Star else Icons.Default.StarBorder,
+                        if (comment.isActuallyFavorited) Icons.Default.Star else Icons.Default.StarBorder,
                         contentDescription = "Favorite",
-                        tint = if (comment.isFavorited == true) Color.Yellow else Color.Gray
+                        tint = if (comment.isActuallyFavorited) Color.Yellow else Color.Gray
                     )
                 }
             }
@@ -134,17 +138,30 @@ fun CommentCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Like Button
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isLikedByMe = comment.likedBy.contains(FirebaseAuth.getInstance().currentUser?.uid)
+
                     IconButton(onClick = { onLike(comment.id) }) {
-                        Icon(Icons.Default.Favorite, contentDescription = "Like",
-                            tint = if ((comment.likes ?: 0) > 0) Color.Red else Color.Gray)
+                        Icon(
+                            Icons.Default.Favorite,
+                            contentDescription = "Like",
+                            tint = if (isLikedByMe) Color.Red else Color.Gray
+                        )
                     }
-                    Text("${comment.likes ?: 0}")
+                    Text(
+                        text = "${comment.likes ?: 0}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
 
                 Row {
                     TextButton(onClick = { onReplyToComment(comment.id) }) {
-                        Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply", tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Icons.AutoMirrored.Filled.Reply,
+                            contentDescription = "Reply",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text("Reply")
                     }
@@ -164,14 +181,18 @@ fun CommentCard(
                 }
             }
 
-            // === GROWING CONVERSATION FLOW ===
+            // Replies Section
             if (showReplies) {
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                 Spacer(Modifier.height(8.dp))
 
                 val directReplies = comments.filter { it.parentId == comment.id }
-                    .sortedBy { it.timestamp }
+                    .sortedWith(   // ← Same sorting logic as top level
+                        compareByDescending<Comment> { it.isActuallyFavorited }
+                            .thenByDescending { it.timestamp }
+                            .thenByDescending { it.likes ?: 0 }
+                    )
 
                 directReplies.forEach { reply ->
                     CommentCard(

@@ -10,7 +10,12 @@ data class Notification(
     val userId: String = "",           // recipient
     val recipientId: String? = null,
     val senderId: String = "",
-    val senderName: String = "Unknown User",   // Better default
+
+    // Sender info from UserProfile
+    val senderName: String = "",       // Will be populated as "First Last"
+    val senderFirstName: String? = null,
+    val senderLastName: String? = null,
+
     val type: String = "",
     val title: String = "",
     val body: String = "",
@@ -31,15 +36,18 @@ data class Notification(
     val read: Boolean = false,
     val imageUrl: String? = null
 ) {
-    // Helper for UI / sorting
+    // Helper for UI
+    val displaySenderName: String
+        get() {
+            val fullName = listOfNotNull(senderFirstName, senderLastName)
+                .joinToString(" ")
+                .trim()
+            return if (fullName.isNotBlank()) fullName else senderName.ifBlank { "Unknown User" }
+        }
+
     val timestampMillis: Long
         get() = timestamp?.toDate()?.time ?: System.currentTimeMillis()
 
-    // Helper to get safe sender name
-    val displaySenderName: String
-        get() = senderName.ifBlank { "Unknown User" }
-
-    // Helper for relative time (used in UI)
     fun getRelativeTime(): String {
         return DateUtils.getRelativeTimeSpanString(
             timestampMillis,

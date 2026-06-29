@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import com.phoenixcorp.founderfinder.domain.repository.ForumRepository
+import com.phoenixcorp.founderfinder.domain.usecase.CreateThreadNotificationUseCase
 import com.phoenixcorp.founderfinder.domain.usecase.CreateThreadUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ForumViewModel @Inject constructor(
     private val forumRepository: ForumRepository,
-    private val createThreadUseCase: CreateThreadUseCase
+    private val createThreadUseCase: CreateThreadUseCase,
+    private val createThreadNotificationUseCase: CreateThreadNotificationUseCase
 ) : ViewModel() {
 
     private val _threads = MutableStateFlow<List<Thread>>(emptyList())
@@ -124,6 +126,8 @@ class ForumViewModel @Inject constructor(
             if (result.isSuccess) {
                 _error.value = null
                 loadThreads(category, forumId) // Refresh list
+
+                Log.d("ForumViewModel", "✅ Thread created successfully - NO notification sent")
             } else {
                 _error.value = result.exceptionOrNull()?.message ?: "Failed to create thread"
             }
