@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
+import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -36,13 +37,29 @@ import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.CalendarSection
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
+import com.phoenixcorp.founderfinder.workers.ReminderWorker
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Data
+import java.util.concurrent.TimeUnit
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.phoenixcorp.founderfinder.workers.ActivityReminderWorker
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
+import com.phoenixcorp.founderfinder.ui.viewmodel.notifications.NotificationsViewModel
 
 @Composable
-fun PartnersScreen(navController: NavHostController) {
+fun PartnersScreen(
+    navController: NavHostController,
+    notificationsViewModel: NotificationsViewModel = hiltViewModel()   // ← Changed to ViewModel
+) {
     val context = LocalContext.current
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -101,6 +118,8 @@ fun PartnersScreen(navController: NavHostController) {
                 }
             }
             Log.d("PartnersScreen", "Fetched ${createdOrgs.size} created organizations")
+
+
 
             // Fetch invited organizations
             val invitationSnapshot = firestore.collection("invitations")
@@ -197,6 +216,39 @@ fun PartnersScreen(navController: NavHostController) {
             errorMessage = "Failed to load data: ${e.message}"
             isLoading = false
             Log.e("PartnersScreen", "General error: ${e.message}", e)
+        }
+    }
+
+    // Handle deep link from notification / reminder
+    LaunchedEffect(navController) {
+        val highlightActivityId = navController.currentBackStackEntry
+            ?.arguments
+            ?.getString("highlightActivity")
+
+        if (highlightActivityId != null) {
+            Log.d("PartnersScreen", "Highlighting activity: $highlightActivityId")
+
+            // Find the activity
+            val targetActivity = activities.find { it.id == highlightActivityId }
+
+            if (targetActivity != null) {
+                // Switch to correct context (org or personal)
+                if (targetActivity.isOrganizationActivity && targetActivity.organizationId != null) {
+                    selectedOrgId = targetActivity.organizationId
+                    selectedPartnerId = null
+                } else {
+                    selectedPartnerId = targetActivity.creatorId
+                    selectedOrgId = null
+                }
+
+                // Auto-select the day of the activity
+                val activityCal = Calendar.getInstance().apply {
+                    timeInMillis = targetActivity.date
+                }
+                selectedDay = activityCal.get(Calendar.DAY_OF_MONTH)
+
+                Log.d("PartnersScreen", "Auto-selected day: $selectedDay for activity ${targetActivity.id}")
+            }
         }
     }
 
@@ -455,6 +507,7 @@ fun PartnersScreen(navController: NavHostController) {
                     },
                     timeSlots = timeSlots,
                     calendarTitle = calendarTitle,
+                    selectedDay = selectedDay,                    // ← Make sure this is passed
                     onDayTap = { day ->
                         selectedDay = day
                         showActivityInput = false
@@ -463,7 +516,6 @@ fun PartnersScreen(navController: NavHostController) {
                     onDayLongPress = { day ->
                         selectedDay = day
 
-                        // Only auto-select organization if NOTHING is selected
                         if (selectedOrgId == null && selectedPartnerId == null && organizations.isNotEmpty()) {
                             selectedOrgId = organizations.first().id
                             Toast.makeText(context, "Selected organization: ${organizations.first().name}", Toast.LENGTH_SHORT).show()
@@ -490,19 +542,22 @@ fun PartnersScreen(navController: NavHostController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-// Activity Input or Details
+                // Activity Input or Details
                 if (selectedDay != null) {
                     val dayActivities = activities.filter { activity ->
                         val activityDate = Calendar.getInstance().apply { timeInMillis = activity.date }
-                        activityDate.get(Calendar.DAY_OF_MONTH) == selectedDay &&
+                        val matchesDate = activityDate.get(Calendar.DAY_OF_MONTH) == selectedDay &&
                                 activityDate.get(Calendar.MONTH) == currentMonth.get(Calendar.MONTH) &&
-                                activityDate.get(Calendar.YEAR) == currentMonth.get(Calendar.YEAR) &&
-                                (when {
-                                    selectedOrgId != null -> activity.organizationId == selectedOrgId || activity.orgId == selectedOrgId
-                                    selectedPartnerId != null -> activity.creatorId == selectedPartnerId
-                                    currentUser != null -> activity.creatorId == currentUser.uid
-                                    else -> false
-                                })
+                                activityDate.get(Calendar.YEAR) == currentMonth.get(Calendar.YEAR)
+
+                        val matchesContext = when {
+                            selectedOrgId != null -> activity.isOrganizationActivity &&
+                                    (activity.organizationId == selectedOrgId || activity.orgId == selectedOrgId)
+                            selectedPartnerId != null -> activity.creatorId == selectedPartnerId && !activity.isOrganizationActivity
+                            else -> !activity.isOrganizationActivity && activity.creatorId == currentUser?.uid
+                        }
+
+                        matchesDate && matchesContext
                     }.sortedBy { it.time }
 
                     if (showActivityInput) {
@@ -522,72 +577,97 @@ fun PartnersScreen(navController: NavHostController) {
                             minLines = 2
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Select Time Slot", style = MaterialTheme.typography.bodyMedium)
 
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(timeSlots) { slot ->
-                                val isBooked = dayActivities.any { it.time == slot }
-                                Button(
-                                    onClick = { selectedTimeSlot = slot },
-                                    enabled = !isBooked,
-                                    colors = if (selectedTimeSlot == slot)
-                                        ButtonDefaults.buttonColors(MaterialTheme.colorScheme.primary)
-                                    else ButtonDefaults.buttonColors(),
-                                    modifier = Modifier.width(100.dp)
-                                ) {
-                                    Text(slot)
-                                }
-                            }
-                        }
+                        // === TIME PICKER (AM/PM Dial) ===
+                        Text("Select Time", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var selectedHour by remember { mutableStateOf(12) }
+                        var selectedMinute by remember { mutableStateOf(0) }
+                        var isAm by remember { mutableStateOf(true) }
+
+                        TimePicker(
+                            hour = selectedHour,
+                            minute = selectedMinute,
+                            isAm = isAm,
+                            onHourChange = { selectedHour = it },
+                            onMinuteChange = { selectedMinute = it },
+                            onAmPmChange = { isAm = it }
+                        )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
-                                if (currentUser != null && activityTitle.isNotBlank() && selectedTimeSlot != null) {
+                                if (currentUser != null && activityTitle.isNotBlank()) {
                                     coroutineScope.launch {
                                         try {
-                                            val activityDate = Calendar.getInstance().apply {
+                                            // === CONVERT LOCAL TIME PICKER TO UTC MILLIS ===
+                                            val calendar = Calendar.getInstance().apply {
+                                                // Set the date from currentMonth + selectedDay
                                                 time = currentMonth.time
                                                 set(Calendar.DAY_OF_MONTH, selectedDay!!)
-                                            }.timeInMillis
+
+                                                // Set the time from picker (local time)
+                                                set(Calendar.HOUR_OF_DAY, if (isAm) selectedHour % 12 else (selectedHour % 12) + 12)
+                                                set(Calendar.MINUTE, selectedMinute)
+                                                set(Calendar.SECOND, 0)
+                                                set(Calendar.MILLISECOND, 0)
+                                            }
+
+                                            val activityDateUtc = calendar.timeInMillis   // This is now correct UTC
+
+                                            val isOrgActivity = selectedOrgId != null
 
                                             val newActivity = Activity(
                                                 title = activityTitle,
                                                 description = activityDescription,
                                                 partnerId = selectedPartnerId ?: currentUser.uid,
-                                                date = activityDate,
-                                                time = selectedTimeSlot,
+                                                date = activityDateUtc,                    // Store as UTC
+                                                time = String.format("%02d:%02d %s",
+                                                    if (selectedHour == 12) 12 else selectedHour % 12,
+                                                    selectedMinute,
+                                                    if (isAm) "AM" else "PM"),
                                                 creatorId = currentUser.uid,
                                                 orgId = selectedOrgId,
-                                                organizationId = selectedOrgId
+                                                organizationId = selectedOrgId,
+                                                organizationName = if (isOrgActivity) organizations.find { it.id == selectedOrgId }?.name else null,
+                                                activityType = if (isOrgActivity) "organization" else "personal"
                                             )
 
-                                            if (selectedOrgId != null) {
-                                                // Organization Activity (existing behavior)
+                                            // Save to Firestore
+                                            val activityRef = if (isOrgActivity) {
                                                 firestore.collection("organizations")
                                                     .document(selectedOrgId!!)
                                                     .collection("activities")
                                                     .add(newActivity)
                                                     .await()
-                                                Toast.makeText(context, "Organization activity added!", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                // PERSONAL ACTIVITY - Save under user's profile
                                                 firestore.collection("profiles")
                                                     .document(currentUser.uid)
                                                     .collection("activities")
                                                     .add(newActivity)
                                                     .await()
-                                                Toast.makeText(context, "Personal activity added!", Toast.LENGTH_SHORT).show()
                                             }
+
+                                            // Create notification & schedule reminders using UTC time
+                                            createActivityReminders(
+                                                context = context,
+                                                activityId = activityRef.id,
+                                                title = activityTitle,
+                                                startTimeMillis = activityDateUtc,   // Pass correct UTC time
+                                                isOrganizationActivity = isOrgActivity,
+                                                organizationId = selectedOrgId
+                                            )
+
+                                            Toast.makeText(context, "Activity added successfully!", Toast.LENGTH_SHORT).show()
 
                                             // Clear form
                                             activityTitle = ""
                                             activityDescription = ""
-                                            selectedTimeSlot = null
+                                            selectedHour = 12
+                                            selectedMinute = 0
+                                            isAm = true
                                             showActivityInput = false
 
                                         } catch (e: Exception) {
@@ -595,17 +675,10 @@ fun PartnersScreen(navController: NavHostController) {
                                             Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
                                     }
-                                } else {
-                                    val message = when {
-                                        activityTitle.isBlank() -> "Please enter an activity title"
-                                        selectedTimeSlot == null -> "Please select a time slot"
-                                        else -> "Please fill required fields"
-                                    }
-                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = activityTitle.isNotBlank() && selectedTimeSlot != null
+                            enabled = activityTitle.isNotBlank()
                         ) {
                             Text("Add Activity")
                         }
@@ -623,36 +696,67 @@ fun PartnersScreen(navController: NavHostController) {
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
+
                             dayActivities.forEach { activity ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${activity.time ?: "No time"}: ${activity.title}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.weight(1f)
+                                val isOrg = activity.isOrganizationActivity
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isOrg)
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surfaceVariant
                                     )
-                                    activity.description?.let {
-                                        Text(
-                                            text = it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isOrg) Icons.Default.Business else Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = if (isOrg) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(28.dp)
                                         )
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = activity.title,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = activity.displayType,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isOrg) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                                            )
+                                            // Use local time display
+                                            Text(
+                                                text = activity.getLocalTimeOnly() ?: "No time specified",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            if (!activity.description.isNullOrBlank()) {
+                                                Text(
+                                                    text = activity.description!!,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
                             }
                         } else {
                             Text(
-                                text = "No activities for ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(
-                                    Calendar.getInstance().apply {
-                                        time = currentMonth.time
-                                        set(Calendar.DAY_OF_MONTH, selectedDay!!)
-                                    }.time
-                                )}",
+                                text = "No activities for this day",
                                 style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(16.dp)
                             )
                         }
                     }
@@ -669,4 +773,145 @@ fun PartnersScreen(navController: NavHostController) {
             Log.d("PartnersScreen", "Firestore listeners removed")
         }
     }
+}
+
+@Composable
+fun TimePicker(
+    hour: Int,
+    minute: Int,
+    isAm: Boolean,
+    onHourChange: (Int) -> Unit,
+    onMinuteChange: (Int) -> Unit,
+    onAmPmChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Hour
+        NumberPicker(
+            value = hour,
+            onValueChange = onHourChange,
+            range = 1..12
+        )
+
+        Text(":", style = MaterialTheme.typography.headlineMedium)
+
+        // Minute
+        NumberPicker(
+            value = minute,
+            onValueChange = onMinuteChange,
+            range = 0..59,
+            step = 5
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // AM/PM Toggle
+        Row {
+            TextButton(onClick = { onAmPmChange(true) }) {
+                Text("AM", color = if (isAm) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            }
+            TextButton(onClick = { onAmPmChange(false) }) {
+                Text("PM", color = if (!isAm) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    }
+}
+
+@Composable
+fun NumberPicker(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange,
+    step: Int = 1
+) {
+    val displayValue = if (value < 10) "0$value" else value.toString()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = {
+            val newValue = (value - step).coerceIn(range)
+            onValueChange(newValue)
+        }) {
+            Text("-")
+        }
+        Text(displayValue, style = MaterialTheme.typography.headlineMedium)
+        IconButton(onClick = {
+            val newValue = (value + step).coerceIn(range)
+            onValueChange(newValue)
+        }) {
+            Text("+")
+        }
+    }
+}
+
+// ==================== HELPER FUNCTIONS (OUTSIDE COMPOSABLE) ====================
+
+private fun createActivityReminders(
+    context: Context,
+    activityId: String,
+    title: String,
+    startTimeMillis: Long,           // This is the scheduled UTC start time
+    isOrganizationActivity: Boolean,
+    organizationId: String? = null
+) {
+    val firestore = FirebaseFirestore.getInstance()
+    val workManager = androidx.work.WorkManager.getInstance(context)
+
+    val reminders = listOf(
+        24 * 60 * 60 * 1000L to "1 day before",
+        60 * 60 * 1000L to "1 hour before",
+        10 * 60 * 1000L to "10 minutes before"
+    )
+
+    reminders.forEach { (offset, label) ->
+        val reminderTime = startTimeMillis - offset
+
+        if (reminderTime > System.currentTimeMillis()) {
+            // Save to activityReminders collection
+            val reminderData = mapOf(
+                "activityId" to activityId,
+                "title" to title,
+                "reminderTime" to reminderTime,
+                "eventTime" to startTimeMillis,           // ← Important: pass the actual event time
+                "label" to label,
+                "isOrganizationActivity" to isOrganizationActivity,
+                "organizationId" to organizationId,
+                "createdAt" to System.currentTimeMillis(),
+                "triggered" to false
+            )
+
+            firestore.collection("activityReminders")
+                .add(reminderData)
+                .addOnSuccessListener { docRef ->
+                    Log.d("PartnersScreen", "✅ Created $label reminder: ${docRef.id}")
+
+                    // Schedule WorkManager
+                    val data = androidx.work.Data.Builder()
+                        .putString("reminderId", docRef.id)
+                        .putString("activityId", activityId)
+                        .putString("title", title)
+                        .putString("message", "Starting soon!")
+                        .putLong("eventTime", startTimeMillis)        // ← Pass to worker
+                        .build()
+
+                    val request = androidx.work.OneTimeWorkRequestBuilder<ActivityReminderWorker>()
+                        .setInitialDelay(reminderTime - System.currentTimeMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .setInputData(data)
+                        .build()
+
+                    workManager.enqueue(request)
+                }
+                .addOnFailureListener { e ->
+                    Log.e("PartnersScreen", "Failed to create reminder", e)
+                }
+        }
+    }
+}
+
+private fun getTimeInMillis(timeSlot: String): Long {
+    val parts = timeSlot.split(":")
+    val hours = parts[0].toIntOrNull() ?: 0
+    val minutes = parts[1].toIntOrNull() ?: 0
+    return (hours * 60L * 60 * 1000) + (minutes * 60L * 1000)
 }

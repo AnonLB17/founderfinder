@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,6 +21,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.phoenixcorp.founderfinder.domain.model.Activity
+import com.phoenixcorp.founderfinder.utils.TimeZoneUtils
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
@@ -36,11 +40,23 @@ fun CalendarSection(
         "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "23:30"
     ),
     calendarTitle: String = "Calendar",
+    selectedDay: Int? = null,
     onDayTap: (Int) -> Unit = {},
     onDayLongPress: (Int) -> Unit = {},
     onPreviousMonth: () -> Unit = {},
     onNextMonth: () -> Unit = {}
 ) {
+    val scrollState = rememberScrollState()
+
+    // Auto-scroll to selected day when it changes
+    LaunchedEffect(selectedDay) {
+        if (selectedDay != null) {
+            delay(150)
+            scrollState.animateScrollTo(scrollState.maxValue / 2)
+            android.util.Log.d("CalendarSection", "Auto-scrolled toward day: $selectedDay")
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = calendarTitle,
@@ -88,12 +104,12 @@ fun CalendarSection(
                 }
                 val activityCount = dayActivities.size
 
-                // Color coding: Personal (Blue), Org (Green), Mixed (Purple)
+                // Color coding
                 val busynessColor = when {
                     activityCount == 0 -> null
-                    dayActivities.any { it.orgId != null } && dayActivities.any { it.orgId == null } -> Color(0xFF9C27B0) // Purple = mixed
-                    dayActivities.any { it.orgId != null } -> Color(0xFF4CAF50) // Green = organization
-                    else -> MaterialTheme.colorScheme.primary // Blue = personal
+                    dayActivities.any { it.isOrganizationActivity } && dayActivities.any { !it.isOrganizationActivity } -> Color(0xFF9C27B0)
+                    dayActivities.any { it.isOrganizationActivity } -> Color(0xFF4CAF50)
+                    else -> MaterialTheme.colorScheme.primary
                 }
 
                 Box(
@@ -107,6 +123,16 @@ fun CalendarSection(
                         },
                     contentAlignment = Alignment.Center
                 ) {
+                    // Highlight selected day
+                    if (day == selectedDay) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                        )
+                    }
+
                     busynessColor?.let { color ->
                         Box(
                             modifier = Modifier
@@ -116,10 +142,12 @@ fun CalendarSection(
                                 .background(color)
                         )
                     }
+
                     Text(
                         text = day.toString(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (activityCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        color = if (day == selectedDay) MaterialTheme.colorScheme.primary else
+                            if (activityCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
                 }

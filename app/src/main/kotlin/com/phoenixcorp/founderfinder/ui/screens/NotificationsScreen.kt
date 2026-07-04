@@ -119,6 +119,7 @@ fun NotificationItemCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
+            // Inside NotificationItemCard, in the Column:
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = notification.title.ifBlank { "New Activity" },
@@ -132,11 +133,21 @@ fun NotificationItemCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Text(
-                    text = getRelativeTime(notification.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Show time until event for calendar activities
+                if (notification.type.contains("activity") || notification.type.contains("calendar") || notification.eventTime != null) {
+                    Text(
+                        text = notification.getTimeUntilEvent(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                } else {
+                    Text(
+                        text = notification.getRelativeTime(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // Delete Button (works on unread notifications)
@@ -187,6 +198,15 @@ private fun handleNotificationNavigation(
                 notification.forumId?.let { forumId ->
                     val category = notification.category ?: "marketpotential"
                     navController.navigate("institution_forum/$category/$forumId")
+                }
+            }
+
+            "activity_reminder" -> {                    // ← ADD THIS
+                notification.activityId?.let { activityId ->
+                    Log.d("Notifications", "Navigating to activity: $activityId")
+                    navController.navigate("partners?highlightActivity=$activityId")
+                } ?: run {
+                    navController.navigate("partners")
                 }
             }
 

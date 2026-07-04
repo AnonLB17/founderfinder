@@ -44,11 +44,24 @@ class MainActivity : ComponentActivity() {
     private lateinit var snackbarHostState: SnackbarHostState
     private lateinit var notificationsViewModel: NotificationsViewModel
 
+    // Permission Launchers
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) Log.d("MainActivity", "Notification permission granted")
         else Log.w("MainActivity", "Notification permission denied")
+    }
+
+    private val requestLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineGranted || coarseGranted) {
+            Log.d("MainActivity", "✅ Location permission granted")
+        } else {
+            Log.w("MainActivity", "⚠️ Location permission denied")
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -57,14 +70,12 @@ class MainActivity : ComponentActivity() {
 
         setupPersistentAuth()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
+        // Request permissions
+        requestPermissionsIfNeeded()
 
         val firebaseAppCheck = FirebaseAppCheck.getInstance()
         firebaseAppCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
+        Log.d("MainActivity", "Using DebugAppCheckProviderFactory")
 
         setContent {
             FounderfinderTheme {
@@ -80,6 +91,24 @@ class MainActivity : ComponentActivity() {
             handleIntent(intent)
             fetchFcmToken()
         }, 400)
+    }
+
+    private fun requestPermissionsIfNeeded() {
+        // Notification Permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // Location Permissions (for activity matching)
+        val locationPermissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestLocationPermissionLauncher.launch(locationPermissions)
+        }
     }
 
     private fun checkAuthAndNavigate() {
@@ -119,16 +148,34 @@ class MainActivity : ComponentActivity() {
         val forumId = extras.getString("forumId")
         val category = extras.getString("category")
         val chatId = extras.getString("chatId")
+        val activityId = extras.getString("activityId")
         val notificationId = extras.getString("notificationId")
 
-        Log.d("MainActivity", "handleIntent → screen=$screen, threadId=$threadId, forumId=$forumId, category=$category")
+        Log.d("MainActivity", "handleIntent → screen=$screen, activityId=$activityId, threadId=$threadId")
 
-        // Mark notification as read if ID is provided
+        // Mark notification as read
         if (!notificationId.isNullOrEmpty()) {
             notificationsViewModel.markAsRead(notificationId)
         }
 
         when {
+            // === CALENDAR / ACTIVITY NAVIGATION ===
+            activityId != null || screen.contains("calendar", ignoreCase = true) ||
+                    screen.contains("activity", ignoreCase = true) ||
+                    screen.contains("event", ignoreCase = true) -> {
+
+                val route = if (activityId != null) {
+                    "partners?highlightActivity=$activityId"
+                } else {
+                    "partners"
+                }
+
+                Log.d("MainActivity", "✅ Navigating to Partners/Calendar: $route")
+                navController.navigate(route) {
+                    launchSingleTop = true
+                }
+            }
+
             // === THREAD / COMMENT NAVIGATION ===
             threadId != null && forumId != null -> {
                 val cat = category ?: "requestedsolutions"

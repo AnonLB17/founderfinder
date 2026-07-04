@@ -30,10 +30,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val forumId = data["forumId"]
         val category = data["category"]
         val threadId = data["threadId"]
+        val activityId = data["activityId"]
+        val eventTime = data["eventTime"]?.toLongOrNull()
 
-        Log.d(TAG, "Processing: screen=$screen, forumId=$forumId, category=$category")
+        Log.d(TAG, "Processing: screen=$screen, activityId=$activityId, threadId=$threadId")
 
-        sendNotification(title, body, screen, chatId, forumId, category, threadId)
+        sendNotification(
+            title = title,
+            body = body,
+            screen = screen,
+            chatId = chatId,
+            forumId = forumId,
+            category = category,
+            threadId = threadId,
+            activityId = activityId,
+            eventTime = eventTime
+        )
     }
 
     private fun sendNotification(
@@ -43,7 +55,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         chatId: String?,
         forumId: String?,
         category: String?,
-        threadId: String?
+        threadId: String?,
+        activityId: String? = null,
+        eventTime: Long? = null
     ) {
         val channelId = "founderfinder_notifications"
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -60,14 +74,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
 
             putExtra("screen", screen)
-            putExtra("type", screen)           // Important: pass type as well
+            putExtra("type", screen)
+
             chatId?.let { putExtra("chatId", it) }
             forumId?.let { putExtra("forumId", it) }
             category?.let { putExtra("category", it) }
             threadId?.let { putExtra("threadId", it) }
+            activityId?.let { putExtra("activityId", it) }
+            eventTime?.let { putExtra("eventTime", it) }
         }
 
-        val requestCode = (threadId ?: chatId ?: forumId ?: "default").hashCode()
+        val requestCode = (activityId ?: threadId ?: chatId ?: forumId ?: "default").hashCode()
 
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -86,6 +103,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .build()
 
         notificationManager.notify(requestCode, notification)
-        Log.d(TAG, "🔔 Notification displayed → screen=$screen, threadId=$threadId")
+        Log.d(TAG, "🔔 Notification displayed → screen=$screen, activityId=$activityId, threadId=$threadId")
     }
 }

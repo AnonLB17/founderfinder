@@ -64,12 +64,6 @@ object FirebaseModule {
 
     @Provides
     @Singleton
-    fun provideSendPrivateChatNotificationUseCase(
-        repository: NotificationRepository
-    ): SendPrivateChatNotificationUseCase = SendPrivateChatNotificationUseCase(repository)
-
-    @Provides
-    @Singleton
     fun provideCreateThreadNotificationUseCase(
         repository: NotificationRepository
     ): CreateThreadNotificationUseCase = CreateThreadNotificationUseCase(repository)

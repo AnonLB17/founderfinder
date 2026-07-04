@@ -66,19 +66,23 @@ class NotificationRepositoryImpl @Inject constructor(
         title: String,
         body: String,
         chatId: String?,
+        screen: String?,
         forumId: String?,
         threadId: String?,
         commentId: String?,
         messageId: String?,
-        category: String?
+        category: String?,
+        activityId: String?,
+        eventTime: Long?,
+        activityType: String?,
+        organizationId: String?,
+        organizationName: String?
     ) {
         try {
-            Log.d(TAG, "Creating notification for senderId: $senderId | passed senderName: '$senderName'")
+            Log.d(TAG, "Creating notification for senderId: $senderId | type: $type | messageId: $messageId")
 
             val senderProfile = getSenderProfile(senderId)
             val fullName = senderProfile.getFullName()
-
-            Log.d(TAG, "Profile fetched - firstName: '${senderProfile.firstName}', lastName: '${senderProfile.lastName}', fullName: '$fullName'")
 
             val finalSenderName = when {
                 senderName.isNotBlank() -> senderName
@@ -86,11 +90,12 @@ class NotificationRepositoryImpl @Inject constructor(
                 else -> "Unknown User"
             }
 
-            Log.d(TAG, "Final sender name used: '$finalSenderName'")
-
-            // ... rest of the function remains the same
+            // GUARANTEED UNIQUE ID
             val notificationId = when {
+                messageId != null -> "chat_msg_$messageId"
                 threadId != null && forumId != null -> "${type}_${forumId}_$threadId"
+                activityId != null -> "activity_$activityId"
+                chatId != null -> "chat_${chatId}_${System.currentTimeMillis()}"
                 else -> firestore.collection("notifications")
                     .document(userId)
                     .collection("userNotifications")
@@ -113,12 +118,17 @@ class NotificationRepositoryImpl @Inject constructor(
                 "threadId" to threadId,
                 "commentId" to commentId,
                 "messageId" to messageId,
-                "category" to category,
-                "screen" to when {
+                "activityId" to activityId,
+                "eventTime" to eventTime,
+                "activityType" to activityType,
+                "organizationId" to organizationId,
+                "organizationName" to organizationName,
+                "screen" to (screen ?: when {
+                    activityId != null -> "CalendarScreen"
                     chatId != null -> "PrivateChat"
                     threadId != null -> "ThreadScreen"
                     else -> "ForumTemplate"
-                },
+                }),
                 "timestamp" to com.google.firebase.Timestamp.now(),
                 "read" to false
             )
@@ -130,17 +140,17 @@ class NotificationRepositoryImpl @Inject constructor(
                 .set(data, SetOptions.merge())
                 .await()
 
-            Log.d(TAG, "✅ Created notification '$type' for $userId from $finalSenderName")
+            Log.d(TAG, "✅ Created $type notification for $userId with ID: $notificationId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create notification", e)
         }
     }
 
+    // ... (keep the rest of your file unchanged - getSenderProfile, markAsRead, etc.)
     private suspend fun getSenderProfile(senderId: String): UserProfile {
         return try {
             Log.d(TAG, "Fetching profile for sender: $senderId")
 
-            // 1. Try profiles collection
             val profileDoc = firestore.collection("profiles")
                 .document(senderId)
                 .get()
@@ -154,7 +164,6 @@ class NotificationRepositoryImpl @Inject constructor(
                 }
             }
 
-            // 2. Try users collection
             val userDoc = firestore.collection("users")
                 .document(senderId)
                 .get()
@@ -194,7 +203,6 @@ class NotificationRepositoryImpl @Inject constructor(
         }
     }
 
-    // ... rest of your file (deleteNotification, markAsRead, etc.) remains the same
     override suspend fun deleteNotification(notificationId: String) {
         val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         try {
@@ -221,6 +229,7 @@ class NotificationRepositoryImpl @Inject constructor(
                 .document(cleanId)
                 .update("read", true)
                 .await()
+            Log.d(TAG, "✅ Marked as read: $cleanId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to mark as read", e)
         }

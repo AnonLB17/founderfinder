@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlinx.coroutines.delay
 
 @HiltViewModel
 class NotificationsViewModel @Inject constructor(
@@ -64,9 +63,8 @@ class NotificationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 notificationRepository.markAsRead(notificationId)
-                // Force refresh to update UI immediately
                 loadAllNotifications()
-                Log.d("NotificationsViewModel", "Marked as read and refreshed: $notificationId")
+                Log.d("NotificationsViewModel", "Marked as read: $notificationId")
             } catch (e: Exception) {
                 Log.e("NotificationsViewModel", "Failed to mark as read", e)
             }
@@ -76,7 +74,12 @@ class NotificationsViewModel @Inject constructor(
     fun markAllAsRead() {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
-            notificationRepository.markAllAsRead(userId)
+            try {
+                notificationRepository.markAllAsRead(userId)
+                loadAllNotifications()
+            } catch (e: Exception) {
+                Log.e("NotificationsViewModel", "Failed to mark all as read", e)
+            }
         }
     }
 
@@ -84,13 +87,41 @@ class NotificationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 notificationRepository.deleteNotification(notificationId)
-                Log.d("NotificationsViewModel", "Delete requested for: $notificationId")
-
-                // Force immediate refresh
-                delay(500) // Give Firestore a moment to update
+                delay(500)
                 loadAllNotifications()
             } catch (e: Exception) {
-                Log.e("NotificationsViewModel", "Failed to delete notification", e)
+                Log.e("NotificationsViewModel", "Failed to delete", e)
+            }
+        }
+    }
+
+    // NEW: Create activity notification
+    fun createActivityNotification(
+        userId: String,
+        activityId: String,
+        title: String,
+        body: String,
+        activityType: String,
+        organizationId: String? = null,
+        organizationName: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                notificationRepository.createNotification(
+                    userId = userId,
+                    senderId = userId,
+                    senderName = "System",
+                    type = "activity_reminder",
+                    title = title,
+                    body = body,
+                    activityId = activityId,
+                    activityType = activityType,
+                    organizationId = organizationId,
+                    organizationName = organizationName
+                )
+                Log.d("NotificationsViewModel", "✅ Activity notification created for $activityId")
+            } catch (e: Exception) {
+                Log.e("NotificationsViewModel", "Failed to create activity notification", e)
             }
         }
     }

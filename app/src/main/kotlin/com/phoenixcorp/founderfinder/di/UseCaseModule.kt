@@ -5,6 +5,7 @@ import com.phoenixcorp.founderfinder.domain.repository.ChatRepository
 import com.phoenixcorp.founderfinder.domain.repository.ForumRepository
 import com.phoenixcorp.founderfinder.domain.repository.InvestorRepository
 import com.phoenixcorp.founderfinder.domain.repository.MatchRepository
+import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
 import com.phoenixcorp.founderfinder.domain.repository.PartnerRepository
 import com.phoenixcorp.founderfinder.domain.repository.UserRepository
 import com.phoenixcorp.founderfinder.domain.usecase.*
@@ -49,11 +50,18 @@ object UseCaseModule {
         userRepository: UserRepository
     ): UpdateUserProfileUseCase = UpdateUserProfileUseCase(userRepository)
 
+    // === NEW: Provide SendPrivateChatNotificationUseCase ===
+    @Provides
+    @ViewModelScoped
+    fun provideSendPrivateChatNotificationUseCase(
+        notificationRepository: NotificationRepository
+    ): SendPrivateChatNotificationUseCase = SendPrivateChatNotificationUseCase(notificationRepository)
+
     @Provides
     @ViewModelScoped
     fun provideSendChatMessageUseCase(
         chatRepository: ChatRepository,
-        sendPrivateChatNotificationUseCase: SendPrivateChatNotificationUseCase   // ← Added
+        sendPrivateChatNotificationUseCase: SendPrivateChatNotificationUseCase
     ): SendChatMessageUseCase {
         return SendChatMessageUseCase(chatRepository, sendPrivateChatNotificationUseCase)
     }

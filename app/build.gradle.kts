@@ -85,4 +85,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }

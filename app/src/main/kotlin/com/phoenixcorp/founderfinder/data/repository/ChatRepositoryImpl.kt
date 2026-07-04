@@ -5,6 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.RemoteMessage
 import com.phoenixcorp.founderfinder.domain.model.ChatMessage
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.domain.repository.ChatRepository
 import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
 import kotlinx.coroutines.channels.awaitClose
@@ -25,6 +26,12 @@ class ChatRepositoryImpl @Inject constructor(
         return try {
             val chatDoc = chatsCollection.document(message.chatId)
             chatDoc.collection("messages").document(message.id).set(message).await()
+
+            Log.d(TAG, "✅ Message saved to Firestore. Triggering notification...")
+
+            // Trigger notification
+            sendChatNotification(message.chatId, message)
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send message", e)
@@ -46,76 +53,87 @@ class ChatRepositoryImpl @Inject constructor(
             val recipientId = participants.firstOrNull { it != message.senderId }
                 ?: return Result.failure(Exception("No recipient found"))
 
-            val senderDoc = firestore.collection("users").document(message.senderId).get().await()
-            val senderName = senderDoc.getString("displayName")
-                ?: senderDoc.getString("name")
-                ?: senderDoc.getString("username")
-                ?: "Unknown User"   // ← Better fallback
+            val senderName = getSenderName(message.senderId)
 
-            Log.d(TAG, "Sending notification from $senderName to $recipientId for chat $chatId")
+            Log.d(TAG, "Sending notification from $senderName to $recipientId")
 
-            // Inside sendChatNotification function, replace the createNotification call:
-            notificationRepository.createNotification(
-                userId = recipientId,
-                senderId = message.senderId,
-                senderName = senderName,
-                type = "new_message",
-                title = "New Message from $senderName",
-                body = message.text.take(120),
-                chatId = chatId,
-                forumId = null,
-                threadId = null,
-                commentId = null,
-                messageId = message.id,
-                category = null
-            )
-
-            Log.d(TAG, "✅ Firestore notification created with chatId=$chatId")
-
-            // FCM - Topic-based (most reliable from client)
-            val userDoc = firestore.collection("users").document(recipientId).get().await()
-            val fcmToken = userDoc.getString("fcmToken")
-
-            if (!fcmToken.isNullOrBlank()) {
-                val fcmPayload = mapOf(
-                    "title" to "New Message from $senderName",
-                    "body" to message.text.take(100),
-                    "screen" to "PrivateChat",
-                    "chatId" to chatId,
-                    "senderId" to message.senderId,
-                    "senderName" to senderName,
-                    "type" to "chat_message"
+            // In-app notification
+            try {
+                // Inside sendChatNotification, update the createNotification call:
+                notificationRepository.createNotification(
+                    userId = recipientId,
+                    senderId = message.senderId,
+                    senderName = senderName,
+                    type = "new_message",
+                    title = "New Message from $senderName",
+                    body = (message.text ?: "").take(120),
+                    chatId = chatId,
+                    messageId = message.id,           // ← Key change
+                    screen = "PrivateChat"
                 )
-
-                try {
-                    val topic = "user_$recipientId"
-                    FirebaseMessaging.getInstance().subscribeToTopic(topic).await()
-
-                    val remoteMessage = RemoteMessage.Builder("/topics/$topic")
-                        .setData(fcmPayload)
-                        .build()
-
-                    FirebaseMessaging.getInstance().send(remoteMessage)
-                    Log.d(TAG, "✅ FCM sent via topic to recipient $recipientId")
-                } catch (e: Exception) {
-                    Log.e(TAG, "FCM topic send failed", e)
-                    // Fallback direct token
-                    try {
-                        val directMessage = RemoteMessage.Builder(fcmToken)
-                            .setData(fcmPayload)
-                            .build()
-                        FirebaseMessaging.getInstance().send(directMessage)
-                        Log.d(TAG, "✅ FCM sent via direct token (fallback)")
-                    } catch (fallbackEx: Exception) {
-                        Log.e(TAG, "Both FCM methods failed", fallbackEx)
-                    }
-                }
+                Log.d(TAG, "✅ In-app notification created")
+            } catch (e: Exception) {
+                Log.e(TAG, "In-app notification failed", e)
             }
+
+            // Push notification (FCM)
+            sendFcmPushNotification(recipientId, senderName, message.text ?: "")
 
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send chat notification", e)
             Result.failure(e)
+        }
+    }
+
+    private suspend fun getSenderName(userId: String): String {
+        return try {
+            val doc = firestore.collection("profiles").document(userId).get().await()
+            val profile = doc.toObject(UserProfile::class.java)
+            val fullName = "${profile?.firstName ?: ""} ${profile?.lastName ?: ""}".trim()
+            fullName.ifBlank { "Unknown User" }
+        } catch (e: Exception) {
+            "Unknown User"
+        }
+    }
+
+    private suspend fun sendFcmPushNotification(
+        recipientId: String,
+        senderName: String,
+        messageText: String
+    ) {
+        try {
+            Log.d(TAG, "Attempting FCM push to recipient: $recipientId")
+
+            val userDoc = firestore.collection("users").document(recipientId).get().await()
+            val fcmToken = userDoc.getString("fcmToken")
+
+            if (fcmToken.isNullOrBlank()) {
+                Log.w(TAG, "❌ No FCM token found for recipient $recipientId")
+                return
+            }
+
+            Log.d(TAG, "✅ Found FCM token for $recipientId")
+
+            val fcmPayload = mapOf(
+                "title" to "New Message from $senderName",
+                "body" to messageText.take(100),
+                "screen" to "PrivateChat",
+                "chatId" to "",
+                "senderId" to "",
+                "senderName" to senderName,
+                "type" to "chat_message"
+            )
+
+            val remoteMessage = RemoteMessage.Builder(fcmToken)
+                .setData(fcmPayload)
+                .build()
+
+            FirebaseMessaging.getInstance().send(remoteMessage)
+            Log.d(TAG, "✅ FCM Push successfully sent to token for recipient $recipientId")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ FCM push failed for recipient $recipientId", e)
         }
     }
 

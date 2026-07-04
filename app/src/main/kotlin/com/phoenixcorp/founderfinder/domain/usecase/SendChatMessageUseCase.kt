@@ -16,19 +16,22 @@ class SendChatMessageUseCase @Inject constructor(
         val sendResult = chatRepository.sendMessage(message)
 
         if (sendResult.isSuccess) {
-            Log.d("SendChatMessageUseCase", "Message sent successfully. Triggering notification to recipient...")
+            Log.d("SendChatMessageUseCase", "✅ Message saved successfully. Now triggering notifications...")
+
             try {
+                // Trigger BOTH in-app + push
                 sendPrivateChatNotificationUseCase(
+                    senderId = message.senderId,
                     recipientId = message.recipientId ?: "",
-                    message = message,
-                    senderName = message.senderName ?: "Unknown"
+                    chatId = message.chatId,
+                    messageText = message.text ?: ""
                 )
-                Log.d("SendChatMessageUseCase", "✅ Notification triggered successfully")
+                Log.d("SendChatMessageUseCase", "✅ Notification use case called successfully")
             } catch (e: Exception) {
-                Log.e("SendChatMessageUseCase", "Failed to send notification", e)
+                Log.e("SendChatMessageUseCase", "❌ Failed to trigger notification", e)
             }
         } else {
-            Log.e("SendChatMessageUseCase", "Message send failed: ${sendResult.exceptionOrNull()?.message}")
+            Log.e("SendChatMessageUseCase", "❌ Message send failed: ${sendResult.exceptionOrNull()?.message}")
         }
 
         return sendResult
