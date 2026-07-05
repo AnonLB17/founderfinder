@@ -28,8 +28,10 @@ class CreateCommentUseCase @Inject constructor(
                         commenterId = comment.creatorId,
                         commenterName = comment.creatorName,
                         commentText = comment.message,
-                        threadId = comment.threadId,           // Now available
+                        threadId = comment.threadId,
                         commentId = commentId,
+                        forumId = comment.forumId,     // ← Add this
+                        category = comment.category,   // ← Add this
                         isReplyToComment = isReplyToComment
                     )
                 }

@@ -23,9 +23,10 @@ class SendPrivateChatNotificationUseCase @Inject constructor(
             senderId = senderId,
             senderName = senderName,
             type = "new_message",
-            title = "New Message from $senderName",
+            title = "Private Message from $senderName",
             body = messageText.take(100),
             chatId = chatId,
+            messageId = null,           // optional
             screen = "PrivateChat"
         )
     }

@@ -121,11 +121,13 @@ fun NotificationItemCard(
 
             // Inside NotificationItemCard, in the Column:
             Column(modifier = Modifier.weight(1f)) {
+                // Show sender name + title
                 Text(
-                    text = notification.title.ifBlank { "New Activity" },
+                    text = "${notification.displaySenderName} • ${notification.title}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+
                 Text(
                     text = notification.body.ifBlank { "" },
                     style = MaterialTheme.typography.bodyMedium,
@@ -133,21 +135,12 @@ fun NotificationItemCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Show time until event for calendar activities
-                if (notification.type.contains("activity") || notification.type.contains("calendar") || notification.eventTime != null) {
-                    Text(
-                        text = notification.getTimeUntilEvent(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium
-                    )
-                } else {
-                    Text(
-                        text = notification.getRelativeTime(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // Time
+                Text(
+                    text = notification.getRelativeTime(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             // Delete Button (works on unread notifications)
@@ -195,10 +188,12 @@ private fun handleNotificationNavigation(
             }
 
             "new_thread", "forum" -> {
-                notification.forumId?.let { forumId ->
-                    val category = notification.category ?: "marketpotential"
-                    navController.navigate("institution_forum/$category/$forumId")
-                }
+                val forumId = notification.forumId ?: return
+                val category = notification.category ?: "marketpotential"
+
+                Log.d("Notifications", "Navigating to forum: $category/$forumId")
+
+                navController.navigate("institution_forum/$category/$forumId")   // Make sure this route matches your NavGraph
             }
 
             "activity_reminder" -> {                    // ← ADD THIS

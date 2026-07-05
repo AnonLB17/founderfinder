@@ -83,9 +83,12 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideCreateThreadUseCase(
-        threadRepository: ThreadRepository
-        // Notification use case temporarily removed to stop duplicates
-    ): CreateThreadUseCase = CreateThreadUseCase(threadRepository)
+        threadRepository: ThreadRepository,
+        createThreadNotificationUseCase: CreateThreadNotificationUseCase
+    ): CreateThreadUseCase = CreateThreadUseCase(
+        threadRepository = threadRepository,
+        createThreadNotificationUseCase = createThreadNotificationUseCase
+    )
 
     @Provides
     @Singleton

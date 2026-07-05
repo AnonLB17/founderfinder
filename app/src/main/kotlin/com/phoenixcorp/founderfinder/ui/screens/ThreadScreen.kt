@@ -38,6 +38,12 @@ import com.phoenixcorp.founderfinder.ui.viewmodel.ThreadViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.google.firebase.firestore.ktx.toObject
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -227,21 +233,37 @@ fun ThreadScreen(
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
-                            postComment(inputText, threadId, forumId, category, auth, context, viewModel, replyToId) {
-                                inputText = ""
-                                replyToId = null
-                            }
-                        })
+                            postComment(
+                                inputText = inputText,
+                                parentId = replyToId,
+                                threadViewModel = viewModel,
+                                auth = auth,
+                                firestore = FirebaseFirestore.getInstance(),
+                                category = category,
+                                forumId = forumId,
+                                threadId = threadId
+                            )
+                            inputText = ""
+                            replyToId = null
+                        }),
                     )
 
                     Spacer(Modifier.width(8.dp))
 
                     Button(
                         onClick = {
-                            postComment(inputText, threadId, forumId, category, auth, context, viewModel, replyToId) {
-                                inputText = ""
-                                replyToId = null
-                            }
+                            postComment(
+                                inputText = inputText,
+                                parentId = replyToId,
+                                threadViewModel = viewModel,
+                                auth = auth,
+                                firestore = FirebaseFirestore.getInstance(),
+                                category = category,
+                                forumId = forumId,
+                                threadId = threadId
+                            )
+                            inputText = ""   // Clear here
+                            replyToId = null
                         },
                         enabled = inputText.isNotBlank()
                     ) {
@@ -256,40 +278,49 @@ fun ThreadScreen(
 // postComment function
 private fun postComment(
     inputText: String,
-    threadId: String,
-    forumId: String,
-    category: String,
+    parentId: String? = null,
+    threadViewModel: ThreadViewModel,
     auth: FirebaseAuth,
-    context: android.content.Context,
-    viewModel: ThreadViewModel,
-    parentId: String?,
-    onSuccess: () -> Unit
+    firestore: FirebaseFirestore,
+    category: String,
+    forumId: String,
+    threadId: String
 ) {
-    if (inputText.isBlank() || threadId.isBlank() || forumId.isBlank()) return
+    val currentUser = auth.currentUser ?: return
 
-    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-        val currentUser = auth.currentUser
-        if (currentUser == null) {
-            Toast.makeText(context, "Please sign in", Toast.LENGTH_SHORT).show()
-            return@launch
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            // Fetch real sender name from profile
+            val profileDoc = firestore.collection("profiles")
+                .document(currentUser.uid)
+                .get()
+                .await()
+
+            val profile = profileDoc.toObject(UserProfile::class.java)
+            val realName = "${profile?.firstName ?: ""} ${profile?.lastName ?: ""}".trim()
+                .ifBlank { currentUser.displayName ?: "Anonymous" }
+
+            val profilePicture = profile?.profilePicture ?: currentUser.photoUrl?.toString() ?: ""
+
+            val newComment = Comment(
+                id = UUID.randomUUID().toString(),
+                creatorId = currentUser.uid,
+                creatorName = realName,
+                creatorProfilePicture = currentUser.photoUrl?.toString() ?: profile?.profilePicture ?: "",  // ← Improved
+                message = inputText,
+                timestamp = System.currentTimeMillis(),
+                threadId = threadId,
+                forumId = forumId,
+                category = category.ifBlank { "requestedsolutions" },
+                parentId = parentId,
+                depth = if (parentId == null) 1 else 2
+            )
+
+            // Create comment (this will trigger notification)
+            threadViewModel.createComment(newComment)
+
+        } catch (e: Exception) {
+            Log.e("postComment", "Error creating comment", e)
         }
-
-        val newComment = Comment(
-            id = UUID.randomUUID().toString(),
-            creatorId = currentUser.uid,
-            creatorName = currentUser.displayName ?: "Anonymous",
-            creatorProfilePicture = currentUser.photoUrl?.toString() ?: "",
-            message = inputText,
-            timestamp = System.currentTimeMillis(),
-            threadId = threadId,
-            forumId = forumId,
-            category = category.ifBlank { "requestedsolutions" },
-            parentId = parentId,
-            depth = if (parentId == null) 1 else 2
-        )
-
-        viewModel.createComment(newComment)
-        onSuccess()
-        Toast.makeText(context, "Comment posted", Toast.LENGTH_SHORT).show()
     }
 }

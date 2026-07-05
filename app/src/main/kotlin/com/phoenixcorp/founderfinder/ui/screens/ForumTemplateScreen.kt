@@ -70,34 +70,51 @@ fun ForumTemplateScreen(
     val defaultAvatarUrl = "https://via.placeholder.com/150"
 
     // Parse institutionName
-    val (category, forumId, locationParam) = if (institutionName.contains(" -> ")) {
-        val parts = institutionName.split(" -> ")
-        Triple(parts[0].lowercase(), parts[1], parts.getOrNull(2))
-    } else {
+    val (category, forumId, locationParam) = if (institutionName.contains("/")) {
         val parts = institutionName.split("/")
         Triple(parts[0].lowercase(), parts.getOrNull(1) ?: institutionName.lowercase(), null)
+    } else {
+        Triple("requestedsolutions", institutionName.lowercase(), null)
     }
 
-    // Fetch forum metadata (title, description, location, owner)
+    // Fetch forum metadata
     LaunchedEffect(category, forumId) {
         try {
-            val forumDoc = firestore.collection("category")
+            Log.d("ForumTemplateScreen", "Trying to load forum: category=$category, forumId=$forumId")
+
+            // Try the main path
+            var forumDoc = firestore.collection("category")
                 .document(category)
                 .collection("forum")
                 .document(forumId)
                 .get()
                 .await()
 
-            forumTitle = forumDoc.getString("name")?.replaceFirstChar { it.uppercase() } ?: "Untitled Forum"
-            forumDescription = forumDoc.getString("description")
-                ?: forumDoc.getString("about")
-                        ?: "No description available for this forum."
-            forumLocation = forumDoc.getString("location") ?: locationParam
-            forumOwnerId = forumDoc.getString("creatorId")
+            if (!forumDoc.exists()) {
+                Log.w("ForumTemplateScreen", "Forum not found in /category/... Trying alternative paths")
+                // Try alternative path if needed
+                forumDoc = firestore.collection("forums")
+                    .document(category)
+                    .collection("forums")
+                    .document(forumId)
+                    .get()
+                    .await()
+            }
 
-            Log.d("ForumTemplateScreen", "Loaded forum - Location: $forumLocation")
+            if (forumDoc.exists()) {
+                forumTitle = forumDoc.getString("name")?.replaceFirstChar { it.uppercase() } ?: "Untitled Forum"
+                forumDescription = forumDoc.getString("description") ?: forumDoc.getString("about") ?: "No description available."
+                forumLocation = forumDoc.getString("location")
+                forumOwnerId = forumDoc.getString("creatorId")
+
+                Log.d("ForumTemplateScreen", "✅ Loaded forum - Title: $forumTitle")
+            } else {
+                Log.w("ForumTemplateScreen", "Forum document still not found!")
+                forumTitle = "Forum Not Found"
+            }
         } catch (e: Exception) {
             Log.e("ForumTemplateScreen", "Error fetching forum metadata", e)
+            forumTitle = "Error Loading Forum"
         }
     }
 
@@ -165,10 +182,12 @@ fun ForumTemplateScreen(
         coroutineScope.launch {
             try {
                 if (selectedThreadId == null) {
+                    Log.d("ForumTemplateScreen", "Creating thread with category: $category")  // Add this
+
                     viewModel.createThread(
                         message = inputText,
                         forumId = forumId,
-                        category = category,
+                        category = "requestedsolutions",   // ← Force correct category for now
                         forumOwnerId = forumOwnerId ?: ""
                     )
                 } else {

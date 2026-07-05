@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.model.Thread
+import com.phoenixcorp.founderfinder.domain.usecase.CreateCommentUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,11 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 @HiltViewModel
-class ThreadViewModel @Inject constructor() : ViewModel() {
+class ThreadViewModel @Inject constructor(
+    private val createCommentUseCase: CreateCommentUseCase   // ← Add this line
+) : ViewModel() {
+
+    // ... rest of your code stays the same
 
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -129,19 +134,20 @@ class ThreadViewModel @Inject constructor() : ViewModel() {
             try {
                 val category = comment.category.ifBlank { "requestedsolutions" }
 
-                firestore.collection("category")
-                    .document(category)
-                    .collection("forum")
-                    .document(comment.forumId)
-                    .collection("threads")
-                    .document(comment.threadId)
-                    .collection("comments")
-                    .document(comment.id)
-                    .set(comment)
-                    .await()
+                // Use the UseCase (this triggers notification)
+                val result = createCommentUseCase(
+                    comment = comment,
+                    threadOwnerId = _thread.value?.creatorId ?: "",
+                    threadTitle = _thread.value?.message?.take(50) ?: "Thread",
+                    isReplyToComment = false
+                )
 
-                loadThread(category, comment.forumId, comment.threadId)
-                Log.d("ThreadViewModel", "✅ Comment created successfully")
+                if (result.isSuccess) {
+                    loadThread(category, comment.forumId, comment.threadId)
+                    Log.d("ThreadViewModel", "✅ Comment created successfully")
+                } else {
+                    Log.e("ThreadViewModel", "Failed to create comment", result.exceptionOrNull())
+                }
             } catch (e: Exception) {
                 Log.e("ThreadViewModel", "Failed to create comment", e)
             }

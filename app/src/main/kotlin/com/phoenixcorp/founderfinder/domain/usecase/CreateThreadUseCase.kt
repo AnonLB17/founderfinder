@@ -5,9 +5,8 @@ import com.phoenixcorp.founderfinder.domain.repository.ThreadRepository
 import javax.inject.Inject
 
 class CreateThreadUseCase @Inject constructor(
-    private val threadRepository: ThreadRepository
-    // Notification use case commented out for now to prevent duplicates
-    // private val createThreadNotificationUseCase: CreateThreadNotificationUseCase
+    private val threadRepository: ThreadRepository,
+    private val createThreadNotificationUseCase: CreateThreadNotificationUseCase   // ← Uncomment and inject
 ) {
 
     suspend operator fun invoke(
@@ -22,17 +21,16 @@ class CreateThreadUseCase @Inject constructor(
             if (result.isSuccess) {
                 val threadId = result.getOrNull() ?: thread.id
 
-                // TODO: Re-enable notifications after fixing sender name + duplicate issue
-                // if (thread.creatorId != forumOwnerId) {
-                //     createThreadNotificationUseCase(
-                //         forumOwnerId = forumOwnerId,
-                //         creatorId = thread.creatorId,
-                //         creatorName = thread.creatorName,
-                //         threadId = threadId,
-                //         forumId = forumId,
-                //         category = category
-                //     )
-                // }
+                if (thread.creatorId != forumOwnerId) {
+                    createThreadNotificationUseCase(
+                        forumOwnerId = forumOwnerId,
+                        creatorId = thread.creatorId,
+                        creatorName = thread.creatorName,
+                        threadId = threadId,
+                        forumId = forumId,
+                        category = category
+                    )
+                }
             }
 
             result

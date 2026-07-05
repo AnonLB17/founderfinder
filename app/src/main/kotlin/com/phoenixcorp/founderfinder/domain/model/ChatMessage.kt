@@ -8,16 +8,16 @@ data class ChatMessage(
     val chatId: String = "",
     val senderId: String = "",
     val senderName: String? = null,
-    val recipientId: String? = null,           // ← Added for notifications
+    val recipientId: String? = null,
     val text: String = "",
     val timestamp: Long = 0L,
-    val isRead: Boolean = false,
+    val isRead: Boolean = false,        // ← Make sure this is present
     val imageUrl: String? = null,
     val fileUrl: String? = null,
     val fileName: String? = null,
-    val type: String = "text",                 // text, image, file, etc.
+    val type: String = "text",
 
-    val orgId: String? = null,   // ← Added for organization messages
+    val orgId: String? = null,
 
     @ServerTimestamp
     val serverTimestamp: Timestamp? = null

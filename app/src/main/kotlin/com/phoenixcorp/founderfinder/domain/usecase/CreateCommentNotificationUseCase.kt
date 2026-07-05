@@ -7,31 +7,33 @@ import javax.inject.Inject
 class CreateCommentNotificationUseCase @Inject constructor(
     private val notificationRepository: NotificationRepository
 ) {
+
     suspend operator fun invoke(
         threadOwnerId: String,
         commenterId: String,
-        commenterName: String,        // fallback
+        commenterName: String,
         commentText: String,
         threadId: String,
         commentId: String? = null,
+        forumId: String? = null,
+        category: String? = null,
         isReplyToComment: Boolean = false
     ) {
         val type = if (isReplyToComment) "comment_reply" else "new_comment"
-        val title = if (isReplyToComment) "Reply to your comment" else "New Comment"
+        val title = if (isReplyToComment) "Reply to your comment" else "New Comment on Thread"
 
         notificationRepository.createNotification(
             userId = threadOwnerId,
             senderId = commenterId,
-            senderName = commenterName,           // Repository will improve it with profile data
+            senderName = commenterName,           // Pass the real name
             type = type,
             title = title,
             body = commentText.take(100),
-            chatId = null,
-            forumId = null,
+            forumId = forumId,
             threadId = threadId,
             commentId = commentId,
-            messageId = null,
-            category = null
+            category = category,
+            screen = "ThreadScreen"
         )
     }
 }

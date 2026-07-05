@@ -113,13 +113,13 @@ class ForumViewModel @Inject constructor(
                 creatorId = currentUser?.uid ?: "",
                 creatorName = currentUser?.displayName ?: "Anonymous",
                 timestamp = System.currentTimeMillis(),
-                category = category
+                category = category   // ← Make sure this is set
             )
 
             val result = createThreadUseCase(
                 thread = thread,
                 forumOwnerId = forumOwnerId,
-                category = category,
+                category = category,   // ← Pass it here
                 forumId = forumId
             )
 
@@ -127,7 +127,7 @@ class ForumViewModel @Inject constructor(
                 _error.value = null
                 loadThreads(category, forumId) // Refresh list
 
-                Log.d("ForumViewModel", "✅ Thread created successfully - NO notification sent")
+                Log.d("ForumViewModel", "✅ Thread created successfully with category: $category")
             } else {
                 _error.value = result.exceptionOrNull()?.message ?: "Failed to create thread"
             }

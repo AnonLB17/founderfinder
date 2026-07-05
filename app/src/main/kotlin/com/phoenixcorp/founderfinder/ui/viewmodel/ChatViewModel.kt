@@ -22,19 +22,36 @@ class ChatViewModel @Inject constructor(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages = _messages.asStateFlow()
 
+    private val _isSending = MutableStateFlow(false)
+    val isSending = _isSending.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
     fun loadMessages(chatId: String) {
         getChatMessagesUseCase(chatId)
-            .onEach { _messages.value = it }
+            .onEach { messagesList ->
+                _messages.value = messagesList
+            }
             .launchIn(viewModelScope)
     }
 
     fun sendMessage(message: ChatMessage) {
         viewModelScope.launch {
+            _isSending.value = true
+            _error.value = null
+
             val result = sendChatMessageUseCase(message)
+
             if (result.isFailure) {
-                // TODO: Show error to user (Snackbar, etc.)
-                // You can expose a error state flow if needed
+                _error.value = result.exceptionOrNull()?.message ?: "Failed to send message"
             }
+
+            _isSending.value = false
         }
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 }

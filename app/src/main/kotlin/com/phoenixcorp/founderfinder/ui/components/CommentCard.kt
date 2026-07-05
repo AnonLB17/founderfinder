@@ -83,17 +83,25 @@ fun CommentCard(
         Column(modifier = Modifier.padding(1.dp)) {
             // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Profile Picture
                 Image(
-                    painter = displayProfilePic?.let { rememberAsyncImagePainter(it) }
-                        ?: painterResource(id = R.drawable.ic_profile_placeholder),
-                    contentDescription = "Profile",
+                    painter = if (!displayProfilePic.isNullOrBlank()) {
+                        rememberAsyncImagePainter(displayProfilePic)
+                    } else {
+                        painterResource(id = R.drawable.ic_profile_placeholder)
+                    },
+                    contentDescription = "Profile Picture",
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .clickable { navController.navigate(Screen.UserProfile.createRoute(comment.creatorId)) },
+                        .clickable {
+                            navController.navigate(Screen.UserProfile.createRoute(comment.creatorId))
+                        },
                     contentScale = ContentScale.Crop
                 )
+
                 Spacer(Modifier.width(12.dp))
+
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = displayName,

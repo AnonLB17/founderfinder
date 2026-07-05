@@ -177,10 +177,15 @@ class MainActivity : ComponentActivity() {
             }
 
             // === THREAD / COMMENT NAVIGATION ===
-            threadId != null && forumId != null -> {
-                val cat = category ?: "requestedsolutions"
-                val route = "thread/$cat/$forumId/$threadId"
-                Log.d("MainActivity", "✅ Navigating to Thread: $route")
+            threadId != null && (forumId != null || extras.getString("forumId") != null) -> {
+                val cat = category ?: extras.getString("category") ?: "requestedsolutions"
+                val forum = forumId ?: extras.getString("forumId") ?: ""
+                val commentId = extras.getString("commentId")
+
+                val route = "thread/$cat/$forum/$threadId"
+
+                Log.d("MainActivity", "✅ Navigating to Thread: $route (commentId=$commentId)")
+
                 navController.navigate(route) {
                     launchSingleTop = true
                 }

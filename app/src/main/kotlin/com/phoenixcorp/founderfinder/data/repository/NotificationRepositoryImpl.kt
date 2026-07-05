@@ -85,8 +85,8 @@ class NotificationRepositoryImpl @Inject constructor(
             val fullName = senderProfile.getFullName()
 
             val finalSenderName = when {
-                senderName.isNotBlank() -> senderName
-                fullName.isNotBlank() && fullName != "Unknown User" -> fullName
+                fullName.isNotBlank() && fullName != "Unknown User" -> fullName   // Prioritize profile
+                senderName.isNotBlank() && senderName != "You" && senderName != "Anonymous" -> senderName
                 else -> "Unknown User"
             }
 

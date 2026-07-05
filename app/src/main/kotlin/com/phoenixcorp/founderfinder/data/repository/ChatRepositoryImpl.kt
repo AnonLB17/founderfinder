@@ -2,9 +2,10 @@ package com.phoenixcorp.founderfinder.data.repository
 
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.messaging.RemoteMessage
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.phoenixcorp.founderfinder.domain.model.ChatMessage
+import com.phoenixcorp.founderfinder.domain.model.Conversation
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.domain.repository.ChatRepository
 import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
@@ -25,13 +26,21 @@ class ChatRepositoryImpl @Inject constructor(
     override suspend fun sendMessage(message: ChatMessage): Result<Unit> {
         return try {
             val chatDoc = chatsCollection.document(message.chatId)
+
             chatDoc.collection("messages").document(message.id).set(message).await()
 
-            Log.d(TAG, "✅ Message saved to Firestore. Triggering notification...")
+            chatDoc.set(
+                mapOf(
+                    "lastMessage" to (message.text ?: message.imageUrl?.let { "📷 Image" } ?: ""),
+                    "lastMessageAt" to System.currentTimeMillis(),
+                    "lastMessageSenderId" to message.senderId
+                ),
+                SetOptions.merge()
+            ).await()
 
-            // Trigger notification
+            Log.d(TAG, "✅ Message sent to ${message.chatId}")
+
             sendChatNotification(message.chatId, message)
-
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send message", e)
@@ -39,13 +48,8 @@ class ChatRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun sendChatNotification(
-        chatId: String,
-        message: ChatMessage
-    ): Result<Unit> {
+    override suspend fun sendChatNotification(chatId: String, message: ChatMessage): Result<Unit> {
         return try {
-            Log.d(TAG, "=== sendChatNotification STARTED for chatId=$chatId ===")
-
             val chatDoc = chatsCollection.document(chatId).get().await()
             val participants = chatDoc.get("participants") as? List<String>
                 ?: return Result.failure(Exception("No participants found"))
@@ -55,33 +59,22 @@ class ChatRepositoryImpl @Inject constructor(
 
             val senderName = getSenderName(message.senderId)
 
-            Log.d(TAG, "Sending notification from $senderName to $recipientId")
+            notificationRepository.createNotification(
+                userId = recipientId,
+                senderId = message.senderId,
+                senderName = senderName,
+                type = "new_message",
+                title = "New Message from $senderName",
+                body = (message.text ?: "").take(120),
+                chatId = chatId,
+                messageId = message.id,
+                screen = "PrivateChat"
+            )
 
-            // In-app notification
-            try {
-                // Inside sendChatNotification, update the createNotification call:
-                notificationRepository.createNotification(
-                    userId = recipientId,
-                    senderId = message.senderId,
-                    senderName = senderName,
-                    type = "new_message",
-                    title = "New Message from $senderName",
-                    body = (message.text ?: "").take(120),
-                    chatId = chatId,
-                    messageId = message.id,           // ← Key change
-                    screen = "PrivateChat"
-                )
-                Log.d(TAG, "✅ In-app notification created")
-            } catch (e: Exception) {
-                Log.e(TAG, "In-app notification failed", e)
-            }
-
-            // Push notification (FCM)
             sendFcmPushNotification(recipientId, senderName, message.text ?: "")
-
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send chat notification", e)
+            Log.e(TAG, "Failed to send notification", e)
             Result.failure(e)
         }
     }
@@ -102,52 +95,68 @@ class ChatRepositoryImpl @Inject constructor(
         senderName: String,
         messageText: String
     ) {
-        try {
-            Log.d(TAG, "Attempting FCM push to recipient: $recipientId")
-
-            val userDoc = firestore.collection("users").document(recipientId).get().await()
-            val fcmToken = userDoc.getString("fcmToken")
-
-            if (fcmToken.isNullOrBlank()) {
-                Log.w(TAG, "❌ No FCM token found for recipient $recipientId")
-                return
-            }
-
-            Log.d(TAG, "✅ Found FCM token for $recipientId")
-
-            val fcmPayload = mapOf(
-                "title" to "New Message from $senderName",
-                "body" to messageText.take(100),
-                "screen" to "PrivateChat",
-                "chatId" to "",
-                "senderId" to "",
-                "senderName" to senderName,
-                "type" to "chat_message"
-            )
-
-            val remoteMessage = RemoteMessage.Builder(fcmToken)
-                .setData(fcmPayload)
-                .build()
-
-            FirebaseMessaging.getInstance().send(remoteMessage)
-            Log.d(TAG, "✅ FCM Push successfully sent to token for recipient $recipientId")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ FCM push failed for recipient $recipientId", e)
-        }
+        Log.w(TAG, "FCM push called - implement Cloud Function for reliable delivery")
     }
 
     override fun getChatMessages(chatId: String): Flow<List<ChatMessage>> = callbackFlow {
         val listener = chatsCollection.document(chatId)
             .collection("messages")
-            .orderBy("timestamp")
+            .orderBy("timestamp", Query.Direction.DESCENDING)   // ASCENDING is correct
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
                     return@addSnapshotListener
                 }
                 val messages = snapshot?.toObjects(ChatMessage::class.java) ?: emptyList()
-                trySend(messages)
+                trySend(messages)   // No need to reverse here
+            }
+        awaitClose { listener.remove() }
+    }
+
+    override fun getUserConversations(userId: String): Flow<List<Conversation>> = callbackFlow {
+        val listener = chatsCollection
+            .whereArrayContains("participantIds", userId)
+            .orderBy("lastMessageAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error loading conversations", error)
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                val conversations = mutableListOf<Conversation>()
+
+                snapshot?.documents?.forEach { doc ->
+                    val data = doc.data ?: return@forEach
+                    val participantIds = data["participantIds"] as? List<String> ?: emptyList()
+                    val otherUserId = participantIds.firstOrNull { it != userId } ?: return@forEach
+
+                    // Fetch profile for other user
+                    firestore.collection("profiles")
+                        .document(otherUserId)
+                        .get()
+                        .addOnSuccessListener { profileDoc ->
+                            val profile = profileDoc.toObject(UserProfile::class.java)
+
+                            val conversation = Conversation(
+                                conversationId = doc.id,
+                                participants = participantIds,
+                                otherUserId = otherUserId,
+                                otherUserName = "${profile?.firstName ?: ""} ${profile?.lastName ?: ""}".trim().ifBlank { "Unknown User" },
+                                otherUserProfilePicture = profile?.profilePicture,
+                                lastMessage = data["lastMessage"] as? String,
+                                lastMessageAt = data["lastMessageAt"] as? Long,
+                                lastMessageSenderId = data["lastMessageSenderId"] as? String,
+                                createdAt = (data["createdAt"] as? Long) ?: 0L
+                            )
+
+                            conversations.add(conversation)
+                            trySend(conversations.toList())
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Failed to load profile for $otherUserId", e)
+                        }
+                }
             }
 
         awaitClose { listener.remove() }
@@ -173,10 +182,15 @@ class ChatRepositoryImpl @Inject constructor(
             chatRef.set(
                 mapOf(
                     "participants" to listOf(userId1, userId2),
+                    "participantIds" to listOf(userId1, userId2),   // Added for consistency
                     "createdAt" to System.currentTimeMillis()
                 )
             ).await()
         }
         return chatId
+    }
+
+    override suspend fun deleteConversationForUser(chatId: String) {
+        // TODO: Implement soft delete if needed
     }
 }

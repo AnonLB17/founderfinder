@@ -8,13 +8,14 @@ import javax.inject.Inject
 class CreateThreadNotificationUseCase @Inject constructor(
     private val notificationRepository: NotificationRepository
 ) {
+
     suspend operator fun invoke(
         forumOwnerId: String,
         creatorId: String,
         creatorName: String,
         threadId: String,
         forumId: String,
-        category: String
+        category: String   // This should be "requestedsolutions"
     ) {
         if (creatorId == forumOwnerId) {
             Log.d("CreateThreadNotification", "Skipping self-notification")
@@ -26,14 +27,12 @@ class CreateThreadNotificationUseCase @Inject constructor(
             senderId = creatorId,
             senderName = creatorName,
             type = "new_thread",
-            title = "New Thread",
+            title = "New Thread in Your Forum",
             body = "A new thread was created in your forum",
-            chatId = null,
             forumId = forumId,
             threadId = threadId,
-            commentId = null,
-            messageId = null,
-            category = category
+            category = category,   // Make sure this is "requestedsolutions"
+            screen = "ForumTemplate"
         )
     }
 }
