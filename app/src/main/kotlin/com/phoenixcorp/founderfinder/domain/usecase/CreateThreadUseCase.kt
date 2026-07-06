@@ -6,13 +6,13 @@ import javax.inject.Inject
 
 class CreateThreadUseCase @Inject constructor(
     private val threadRepository: ThreadRepository,
-    private val createThreadNotificationUseCase: CreateThreadNotificationUseCase   // ← Uncomment and inject
+    private val createThreadNotificationUseCase: CreateThreadNotificationUseCase
 ) {
 
     suspend operator fun invoke(
         thread: Thread,
         forumOwnerId: String,
-        category: String,
+        category: String,      // This must be passed correctly
         forumId: String
     ): Result<String> {
         return try {
@@ -28,7 +28,7 @@ class CreateThreadUseCase @Inject constructor(
                         creatorName = thread.creatorName,
                         threadId = threadId,
                         forumId = forumId,
-                        category = category
+                        category = category   // Pass exactly what was given
                     )
                 }
             }

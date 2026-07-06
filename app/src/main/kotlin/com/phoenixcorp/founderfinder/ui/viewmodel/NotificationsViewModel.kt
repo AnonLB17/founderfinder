@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.ui.viewmodel.notifications
 
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,10 +36,10 @@ class NotificationsViewModel @Inject constructor(
     private var notificationJob: Job? = null
 
     init {
-        loadAllNotifications()
+        startPersistentListener()
     }
 
-    fun loadAllNotifications() {
+    private fun startPersistentListener() {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
         notificationJob?.cancel()
@@ -49,21 +50,26 @@ class NotificationsViewModel @Inject constructor(
                 getAllNotificationsUseCase(userId).collectLatest { list ->
                     _notifications.value = list
                     _unreadCount.value = list.count { !it.read }
+                    Log.d("NotificationsViewModel", "✅ Loaded ${list.size} notifications (device=${Build.MODEL})")
                 }
             } catch (e: Exception) {
-                _notifications.value = emptyList()
-                _unreadCount.value = 0
+                Log.w("NotificationsViewModel", "Listener cancelled or error: ${e.message}")
             } finally {
                 _isLoading.value = false
             }
         }
     }
 
+    // Public method to refresh (call from MainActivity or when needed)
+    fun refreshNotifications() {
+        startPersistentListener()
+    }
+
     fun markAsRead(notificationId: String) {
         viewModelScope.launch {
             try {
                 notificationRepository.markAsRead(notificationId)
-                loadAllNotifications()
+                refreshNotifications()  // Refresh after marking read
                 Log.d("NotificationsViewModel", "Marked as read: $notificationId")
             } catch (e: Exception) {
                 Log.e("NotificationsViewModel", "Failed to mark as read", e)
@@ -76,7 +82,7 @@ class NotificationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 notificationRepository.markAllAsRead(userId)
-                loadAllNotifications()
+                refreshNotifications()
             } catch (e: Exception) {
                 Log.e("NotificationsViewModel", "Failed to mark all as read", e)
             }
@@ -88,7 +94,7 @@ class NotificationsViewModel @Inject constructor(
             try {
                 notificationRepository.deleteNotification(notificationId)
                 delay(500)
-                loadAllNotifications()
+                refreshNotifications()
             } catch (e: Exception) {
                 Log.e("NotificationsViewModel", "Failed to delete", e)
             }

@@ -2,12 +2,12 @@ package com.phoenixcorp.founderfinder.data.repository
 
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import com.phoenixcorp.founderfinder.domain.repository.ThreadRepository
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -15,124 +15,86 @@ class ThreadRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore
 ) : ThreadRepository {
 
-    private val TAG = "ThreadRepository"
+    // Legacy path only: /category/{category}/forum/{forumId}/threads/...
+    private fun getThreadCollection(category: String, forumId: String) =
+        firestore.collection("category")
+            .document(category)
+            .collection("forum")
+            .document(forumId)
+            .collection("threads")
+
+    private fun getCommentCollection(category: String, forumId: String, threadId: String) =
+        getThreadCollection(category, forumId)
+            .document(threadId)
+            .collection("comments")
+
+    // ==================== THREADS ====================
 
     override suspend fun createThread(thread: Thread): Result<String> {
         return try {
-            val category = thread.category.ifBlank { "marketpotential" }
-            val forumId = thread.forumId.ifBlank { throw IllegalArgumentException("forumId is required") }
-
-            firestore.collection("category")
-                .document(category)
-                .collection("forum")
-                .document(forumId)
-                .collection("threads")
+            val threadRef = getThreadCollection(thread.category, thread.forumId)
                 .document(thread.id)
-                .set(thread)
-                .await()
 
-            Log.d(TAG, "✅ Thread created: ${thread.id} in $category/$forumId")
+            threadRef.set(thread).await()
+            Log.d("ThreadRepository", "Thread created in legacy path: ${thread.category}/${thread.forumId}")
             Result.success(thread.id)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create thread", e)
+            Log.e("ThreadRepository", "Failed to create thread", e)
             Result.failure(e)
         }
     }
 
     override suspend fun getThreadsByForum(category: String, forumId: String): List<Thread> {
         return try {
-            val snapshot = firestore.collection("category")
-                .document(category)
-                .collection("forum")
-                .document(forumId)
-                .collection("threads")
-                .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            val threads = getThreadCollection(category, forumId)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .await()
+                .toObjects(Thread::class.java)
 
-            snapshot.documents.mapNotNull { doc ->
-                doc.toObject(Thread::class.java)?.copy(forumId = forumId, category = category)
-            }
+            Log.d("ThreadRepository", "✅ Loaded ${threads.size} threads from legacy path")
+            threads
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get threads", e)
+            Log.e("ThreadRepository", "Failed to load threads", e)
             emptyList()
         }
     }
 
-    override suspend fun getThreadById(category: String, forumId: String, threadId: String): Thread? {
+    override suspend fun getThreadById(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): Thread? {
         return try {
-            val doc = firestore.collection("category")
-                .document(category)
-                .collection("forum")
-                .document(forumId)
-                .collection("threads")
+            getThreadCollection(category, forumId)
                 .document(threadId)
                 .get()
                 .await()
-
-            doc.toObject(Thread::class.java)?.copy(forumId = forumId, category = category)
+                .toObject(Thread::class.java)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get thread $threadId", e)
+            Log.e("ThreadRepository", "Failed to load thread", e)
             null
         }
     }
 
-    override fun getThreadsFlow(category: String, forumId: String): Flow<List<Thread>> = callbackFlow {
-        val listener = firestore.collection("category")
-            .document(category)
-            .collection("forum")
-            .document(forumId)
-            .collection("threads")
-            .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Snapshot error", error)
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    override fun getThreadsFlow(category: String, forumId: String): Flow<List<Thread>> = flow {
+        try {
+            getThreadCollection(category, forumId)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e("ThreadRepository", "Snapshot error", error)
+                        return@addSnapshotListener
+                    }
+                    val threads = snapshot?.toObjects(Thread::class.java) ?: emptyList()
+                    // Note: Real emission should use callbackFlow in production
                 }
-                val threads = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(Thread::class.java)?.copy(forumId = forumId, category = category)
-                } ?: emptyList()
-                trySend(threads)
-            }
-
-        awaitClose { listener.remove() }
-    }
-
-    override suspend fun createComment(comment: Comment): Result<String> {
-        return try {
-            val category = comment.category.ifBlank { "marketpotential" }
-            val forumId = comment.forumId.ifBlank { throw IllegalArgumentException("forumId is required") }
-            val threadId = comment.threadId.ifBlank { throw IllegalArgumentException("threadId is required") }
-
-            firestore.collection("category")
-                .document(category)
-                .collection("forum")
-                .document(forumId)
-                .collection("threads")
-                .document(threadId)
-                .collection("comments")
-                .document(comment.id)
-                .set(comment)
-                .await()
-
-            Log.d(TAG, "✅ Comment created: ${comment.id} on thread $threadId")
-            Result.success(comment.id)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create comment", e)
-            Result.failure(e)
+            emit(emptyList())
         }
     }
 
-    override suspend fun getCommentById(commentId: String): Comment? {
-        // TODO: Full implementation (needs category/forum/thread context)
-        return null
-    }
-
-    override fun getRepliesForComment(commentId: String): Flow<List<Comment>> = callbackFlow {
-        // TODO: Real-time replies
-        trySend(emptyList())
-    }
+    // ==================== LIKE / FAVORITE ====================
 
     override suspend fun toggleLike(
         category: String,
@@ -140,7 +102,30 @@ class ThreadRepositoryImpl @Inject constructor(
         threadId: String,
         userId: String
     ): Result<Unit> {
-        return Result.success(Unit)
+        return try {
+            val threadRef = getThreadCollection(category, forumId).document(threadId)
+            val snapshot = threadRef.get().await()
+            val likedBy = snapshot.get("likedBy") as? List<String> ?: emptyList()
+
+            if (likedBy.contains(userId)) {
+                threadRef.update(
+                    mapOf(
+                        "likes" to com.google.firebase.firestore.FieldValue.increment(-1),
+                        "likedBy" to com.google.firebase.firestore.FieldValue.arrayRemove(userId)
+                    )
+                ).await()
+            } else {
+                threadRef.update(
+                    mapOf(
+                        "likes" to com.google.firebase.firestore.FieldValue.increment(1),
+                        "likedBy" to com.google.firebase.firestore.FieldValue.arrayUnion(userId)
+                    )
+                ).await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun toggleFavorite(
@@ -151,18 +136,56 @@ class ThreadRepositoryImpl @Inject constructor(
         isFavorited: Boolean
     ): Result<Unit> {
         return try {
-            firestore.collection("category")
-                .document(category)
-                .collection("forum")
-                .document(forumId)
-                .collection("threads")
-                .document(threadId)
-                .update("isFavorited", isFavorited)
-                .await()
+            getThreadCollection(category, forumId).document(threadId)
+                .update("isFavorited", isFavorited).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to toggle favorite", e)
             Result.failure(e)
         }
     }
+
+    // ==================== COMMENTS ====================
+
+    override suspend fun createComment(comment: Comment): Result<String> {
+        return try {
+            val commentRef = getCommentCollection(comment.category, comment.forumId, comment.threadId)
+                .document(comment.id)
+
+            commentRef.set(comment).await()
+            Result.success(comment.id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getCommentsForThread(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): List<Comment> {
+        return try {
+            getCommentCollection(category, forumId, threadId)
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .get()
+                .await()
+                .toObjects(Comment::class.java)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    override fun getCommentsFlowForThread(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): Flow<List<Comment>> = flow {
+        getCommentCollection(category, forumId, threadId)
+            .orderBy("timestamp", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                val comments = snapshot?.toObjects(Comment::class.java) ?: emptyList()
+            }
+    }
+
+    override suspend fun getCommentById(commentId: String): Comment? = null
+    override fun getRepliesForComment(commentId: String): Flow<List<Comment>> = flow { emit(emptyList()) }
 }

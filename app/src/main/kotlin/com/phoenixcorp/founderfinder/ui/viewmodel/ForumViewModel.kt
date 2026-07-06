@@ -4,7 +4,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Comment
+import com.phoenixcorp.founderfinder.domain.model.Forum
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import com.phoenixcorp.founderfinder.domain.repository.ForumRepository
 import com.phoenixcorp.founderfinder.domain.usecase.CreateThreadNotificationUseCase
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
 
@@ -23,6 +26,9 @@ class ForumViewModel @Inject constructor(
     private val createThreadUseCase: CreateThreadUseCase,
     private val createThreadNotificationUseCase: CreateThreadNotificationUseCase
 ) : ViewModel() {
+
+    private val _forum = MutableStateFlow<Forum?>(null)
+    val forum: StateFlow<Forum?> = _forum.asStateFlow()
 
     private val _threads = MutableStateFlow<List<Thread>>(emptyList())
     val threads: StateFlow<List<Thread>> = _threads.asStateFlow()
@@ -47,18 +53,37 @@ class ForumViewModel @Inject constructor(
 
     private val currentUser = FirebaseAuth.getInstance().currentUser
 
-    fun loadThreads(category: String, forumId: String) {
+    fun loadForum(category: String, forumId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
+
+            try {
+                val forumData = forumRepository.getForum(category, forumId)
+                if (forumData != null) {
+                    _forum.value = forumData
+                    loadThreads(category, forumId)
+                } else {
+                    _error.value = "Forum not found: $category/$forumId"
+                    Log.w("ForumViewModel", "Forum document not found at categories/$category/forums/$forumId")
+                }
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Failed to load forum"
+                Log.e("ForumViewModel", "Error loading forum", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private fun loadThreads(category: String, forumId: String) {
+        viewModelScope.launch {
             try {
                 val loadedThreads = forumRepository.getThreadsByForum(category, forumId)
                 _threads.value = loadedThreads.sortedByDescending { it.timestamp }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Failed to load threads"
-                _threads.value = emptyList()
-            } finally {
-                _isLoading.value = false
+                Log.e("ForumViewModel", "Error loading threads", e)
             }
         }
     }
@@ -66,15 +91,12 @@ class ForumViewModel @Inject constructor(
     fun loadThreadDetails(category: String, forumId: String, threadId: String) {
         viewModelScope.launch {
             try {
-                if (forumId.isBlank()) {
-                    Log.e("ForumViewModel", "forumId is empty")
-                    return@launch
-                }
+                if (forumId.isBlank() || threadId.isBlank()) return@launch
 
                 val loadedThread = forumRepository.getThreadById(category, forumId, threadId)
                 _selectedThread.value = loadedThread
 
-                // TODO: Load comments
+                // TODO: Load comments for selected thread
                 _commentsForThread.value = emptyList()
             } catch (e: Exception) {
                 Log.e("ForumViewModel", "Failed to load thread details", e)
@@ -83,51 +105,94 @@ class ForumViewModel @Inject constructor(
         }
     }
 
-    fun loadCommentDetails(commentId: String) {
-        viewModelScope.launch {
-            try {
-                // TODO: Implement getCommentById in repository
-                _selectedComment.value = null
-                _repliesForComment.value = emptyList()
-            } catch (e: Exception) {
-                Log.e("ForumViewModel", "Failed to load comment details", e)
-                _error.value = e.message
-            }
-        }
-    }
-
     fun createThread(
         message: String,
         forumId: String,
-        category: String,
+        routeCategory: String,
         forumOwnerId: String
     ) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
 
+            val actualCategory = forum.value?.category?.takeIf { it.isNotBlank() }
+                ?: routeCategory.takeIf { it.isNotBlank() }
+                ?: ""
+
+            if (actualCategory.isBlank()) {
+                Log.e("ForumViewModel", "Cannot create thread - category is blank!")
+                _error.value = "Category is required"
+                _isLoading.value = false
+                return@launch
+            }
+
+            val currentUser = FirebaseAuth.getInstance().currentUser
+            val uid = currentUser?.uid ?: ""
+
+            // Name resolution
+            var creatorName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
+
+            if (creatorName.isBlank()) {
+                try {
+                    val profileDoc = FirebaseFirestore.getInstance()
+                        .collection("profiles")
+                        .document(uid)
+                        .get()
+                        .await()
+
+                    val firstName = profileDoc.getString("firstName") ?: ""
+                    val lastName = profileDoc.getString("lastName") ?: ""
+                    creatorName = "$firstName $lastName".trim()
+                } catch (e: Exception) {
+                    Log.w("ForumViewModel", "Could not fetch profile name", e)
+                }
+            }
+
+            if (creatorName.isBlank()) {
+                creatorName = "User"
+            }
+
+            // Profile Picture - Better resolution
+            var profilePicture = currentUser?.photoUrl?.toString() ?: ""
+
+            if (profilePicture.isBlank()) {
+                try {
+                    val profileDoc = FirebaseFirestore.getInstance()
+                        .collection("profiles")
+                        .document(uid)
+                        .get()
+                        .await()
+
+                    profilePicture = profileDoc.getString("profilePicture") ?: ""
+                    Log.d("ForumViewModel", "Fetched profile picture from profiles collection")
+                } catch (e: Exception) {
+                    Log.w("ForumViewModel", "Could not fetch profile picture", e)
+                }
+            }
+
             val thread = Thread(
                 id = UUID.randomUUID().toString(),
                 message = message,
                 forumId = forumId,
-                creatorId = currentUser?.uid ?: "",
-                creatorName = currentUser?.displayName ?: "Anonymous",
+                creatorId = uid,
+                creatorName = creatorName,
+                creatorProfilePicture = profilePicture,     // ← Should now have value
                 timestamp = System.currentTimeMillis(),
-                category = category   // ← Make sure this is set
+                category = actualCategory
             )
+
+            Log.d("ForumViewModel", "Creating thread by: $creatorName | pic=${profilePicture.isNotBlank()}")
 
             val result = createThreadUseCase(
                 thread = thread,
                 forumOwnerId = forumOwnerId,
-                category = category,   // ← Pass it here
+                category = actualCategory,
                 forumId = forumId
             )
 
             if (result.isSuccess) {
-                _error.value = null
-                loadThreads(category, forumId) // Refresh list
-
-                Log.d("ForumViewModel", "✅ Thread created successfully with category: $category")
+                loadThreads(actualCategory, forumId)
+                Log.d("ForumViewModel", "✅ Thread created successfully")
             } else {
                 _error.value = result.exceptionOrNull()?.message ?: "Failed to create thread"
             }
@@ -135,4 +200,7 @@ class ForumViewModel @Inject constructor(
             _isLoading.value = false
         }
     }
+
+    // Keep other methods for now
+    fun loadCommentDetails(commentId: String) { /* TODO */ }
 }

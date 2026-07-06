@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.domain.usecase
 
+import android.util.Log
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.repository.ForumRepository
 import com.phoenixcorp.founderfinder.domain.repository.NotificationRepository
@@ -20,9 +21,11 @@ class CreateCommentUseCase @Inject constructor(
             val result = forumRepository.createComment(comment)
 
             if (result.isSuccess) {
-                val commentId = result.getOrNull() ?: ""
+                val commentId = result.getOrNull() ?: comment.id
 
                 if (comment.creatorId != threadOwnerId) {
+                    Log.d("CreateCommentUseCase", "Creating notification for reply=$isReplyToComment")
+
                     createCommentNotificationUseCase(
                         threadOwnerId = threadOwnerId,
                         commenterId = comment.creatorId,
@@ -30,8 +33,8 @@ class CreateCommentUseCase @Inject constructor(
                         commentText = comment.message,
                         threadId = comment.threadId,
                         commentId = commentId,
-                        forumId = comment.forumId,     // ← Add this
-                        category = comment.category,   // ← Add this
+                        forumId = comment.forumId,
+                        category = comment.category,
                         isReplyToComment = isReplyToComment
                     )
                 }

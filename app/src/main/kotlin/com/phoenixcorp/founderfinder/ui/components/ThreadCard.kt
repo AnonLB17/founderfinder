@@ -39,13 +39,12 @@ fun ThreadCard(
     var creatorFullName by remember { mutableStateOf(thread.creatorName) }
     var creatorProfilePicture by remember { mutableStateOf<String?>(null) }
 
-    // Fetch user profile if name is Anonymous
+    // Fetch user profile picture and name if missing
     LaunchedEffect(thread.creatorId) {
-        if ((thread.creatorName.isNullOrBlank() || thread.creatorName == "Anonymous") &&
-            thread.creatorId.isNotEmpty()) {
-
+        if (thread.creatorId.isNotEmpty()) {
             try {
                 Log.d("ThreadCard", "Fetching profile for user: ${thread.creatorId}")
+
                 val firestore = FirebaseFirestore.getInstance()
                 val profileDoc = firestore.collection("profiles")
                     .document(thread.creatorId)
@@ -55,9 +54,17 @@ fun ThreadCard(
                 if (profileDoc.exists()) {
                     val firstName = profileDoc.getString("firstName") ?: ""
                     val lastName = profileDoc.getString("lastName") ?: ""
-                    creatorFullName = "$firstName $lastName".trim().ifEmpty { "Anonymous" }
-                    creatorProfilePicture = profileDoc.getString("profilePicture")
-                    Log.d("ThreadCard", "Profile loaded: $creatorFullName")
+                    val fullName = "$firstName $lastName".trim()
+
+                    if (fullName.isNotBlank() && creatorFullName != fullName) {
+                        creatorFullName = fullName
+                    }
+
+                    val picUrl = profileDoc.getString("profilePicture")
+                    if (!picUrl.isNullOrBlank() && creatorProfilePicture != picUrl) {
+                        creatorProfilePicture = picUrl
+                        Log.d("ThreadCard", "Profile picture loaded: $picUrl")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("ThreadCard", "Error fetching creator details", e)

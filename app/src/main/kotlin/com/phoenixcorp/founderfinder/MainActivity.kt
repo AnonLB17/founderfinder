@@ -31,6 +31,7 @@ import com.phoenixcorp.founderfinder.ui.viewmodel.notifications.NotificationsVie
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -86,11 +87,34 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Force start notification listener on physical device
+        lifecycleScope.launch {
+            delay(800)
+            notificationsViewModel.refreshNotifications()
+            Log.d("MainActivity", "Forced notification listener start on physical device")
+        }
+
         Handler(Looper.getMainLooper()).postDelayed({
             checkAuthAndNavigate()
             handleIntent(intent)
             fetchFcmToken()
+            createNotificationChannel()
         }, 400)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "FounderFinder Notifications"
+            val descriptionText = "Notifications for new threads, comments, and replies"
+            val importance = android.app.NotificationManager.IMPORTANCE_DEFAULT
+            val channel = android.app.NotificationChannel("default_channel", name, importance).apply {
+                description = descriptionText
+            }
+            val notificationManager: android.app.NotificationManager =
+                getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            notificationManager.createNotificationChannel(channel)
+            Log.d("MainActivity", "Notification channel created")
+        }
     }
 
     private fun requestPermissionsIfNeeded() {
@@ -101,7 +125,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Location Permissions (for activity matching)
+        // Location Permissions
         val locationPermissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -151,7 +175,7 @@ class MainActivity : ComponentActivity() {
         val activityId = extras.getString("activityId")
         val notificationId = extras.getString("notificationId")
 
-        Log.d("MainActivity", "handleIntent → screen=$screen, activityId=$activityId, threadId=$threadId")
+        Log.d("MainActivity", "handleIntent → screen=$screen, category=$category, threadId=$threadId, forumId=$forumId")
 
         // Mark notification as read
         if (!notificationId.isNullOrEmpty()) {
@@ -159,58 +183,39 @@ class MainActivity : ComponentActivity() {
         }
 
         when {
-            // === CALENDAR / ACTIVITY NAVIGATION ===
-            activityId != null || screen.contains("calendar", ignoreCase = true) ||
-                    screen.contains("activity", ignoreCase = true) ||
-                    screen.contains("event", ignoreCase = true) -> {
-
-                val route = if (activityId != null) {
-                    "partners?highlightActivity=$activityId"
-                } else {
-                    "partners"
-                }
-
-                Log.d("MainActivity", "✅ Navigating to Partners/Calendar: $route")
-                navController.navigate(route) {
-                    launchSingleTop = true
-                }
-            }
-
             // === THREAD / COMMENT NAVIGATION ===
-            threadId != null && (forumId != null || extras.getString("forumId") != null) -> {
-                val cat = category ?: extras.getString("category") ?: "requestedsolutions"
-                val forum = forumId ?: extras.getString("forumId") ?: ""
-                val commentId = extras.getString("commentId")
+            threadId != null && forumId != null -> {
+                val cat = category?.ifBlank { "" } ?: ""
+                val route = "thread/$cat/$forumId/$threadId"
 
-                val route = "thread/$cat/$forum/$threadId"
-
-                Log.d("MainActivity", "✅ Navigating to Thread: $route (commentId=$commentId)")
-
+                Log.d("MainActivity", "✅ Navigating to Thread: $route")
                 navController.navigate(route) {
                     launchSingleTop = true
                 }
             }
 
             // === FORUM NAVIGATION ===
-            screen in listOf("ForumTemplate", "new_thread", "forum", "institution_forum") || forumId != null -> {
-                val forumIdSafe = forumId ?: extras.getString("id")
-                val cat = category ?: "marketpotential"
+            forumId != null -> {
+                val cat = category?.ifBlank { "" } ?: ""
+                val route = "institution_forum/$cat/$forumId"
 
-                if (forumIdSafe != null) {
-                    val route = "institution_forum/$cat/$forumIdSafe"
-                    Log.d("MainActivity", "✅ Navigating to Forum: $route")
-                    navController.navigate(route) {
-                        launchSingleTop = true
-                    }
+                Log.d("MainActivity", "✅ Navigating to Forum: $route")
+                navController.navigate(route) {
+                    launchSingleTop = true
                 }
             }
 
             // === CHAT NAVIGATION ===
-            chatId != null || screen in listOf("PrivateChat", "chat", "chat_message") -> {
-                chatId?.let {
-                    navController.navigate("private_chat/$it") {
-                        launchSingleTop = true
-                    }
+            chatId != null -> {
+                navController.navigate("private_chat/$chatId") {
+                    launchSingleTop = true
+                }
+            }
+
+            // === ACTIVITY NAVIGATION ===
+            activityId != null -> {
+                navController.navigate("partners?highlightActivity=$activityId") {
+                    launchSingleTop = true
                 }
             }
 
@@ -227,7 +232,7 @@ class MainActivity : ComponentActivity() {
                 val userId = auth.currentUser?.uid ?: return@addOnCompleteListener
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        firestore.collection("users")
+                        firestore.collection("profiles")
                             .document(userId)
                             .set(mapOf("fcmToken" to token, "updatedAt" to System.currentTimeMillis()), com.google.firebase.firestore.SetOptions.merge())
                             .await()
@@ -238,11 +243,5 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun setupFirestoreListeners() {
-        val userId = auth.currentUser?.uid ?: return
-        Log.d("MainActivity", "Setting up listeners for user: $userId")
-        // your existing listeners...
     }
 }

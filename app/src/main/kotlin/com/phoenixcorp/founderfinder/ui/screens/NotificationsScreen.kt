@@ -1,5 +1,6 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
+import android.os.Build
 import android.text.format.DateUtils
 import android.util.Log
 import androidx.compose.foundation.background
@@ -36,8 +37,15 @@ fun NotificationsScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val unreadCount by viewModel.unreadCount.collectAsState()
 
+    // Strong listener start when screen is opened
     LaunchedEffect(Unit) {
-        viewModel.loadAllNotifications()
+        Log.d("NotificationsScreen", "Screen opened - starting listener on ${Build.MODEL}")
+        viewModel.refreshNotifications()
+    }
+
+    // Refresh when returning to this screen
+    LaunchedEffect(Unit) {
+        viewModel.refreshNotifications()
     }
 
     ScreenWithHeader(navController = navController, title = "Activity") {
@@ -169,16 +177,25 @@ private fun handleNotificationNavigation(
     navController: NavHostController,
     notification: Notification
 ) {
-    Log.d("Notifications", "Navigating from notification: type=${notification.type}, threadId=${notification.threadId}, forumId=${notification.forumId}")
+    Log.d("Notifications", "Navigating from notification: type=${notification.type}, " +
+            "threadId=${notification.threadId}, forumId=${notification.forumId}, category=${notification.category}")
 
     try {
         when (notification.type) {
             "new_comment", "comment_reply" -> {
                 val forumId = notification.forumId ?: return
                 val threadId = notification.threadId ?: return
-                val category = notification.category ?: "requestedsolutions"
+                val category = notification.category ?: return   // Fail if no category
 
                 navController.navigate("thread/$category/$forumId/$threadId")
+            }
+
+            "new_thread", "forum" -> {
+                val forumId = notification.forumId ?: return
+                val category = notification.category ?: return   // Fail fast if missing
+
+                Log.d("Notifications", "Navigating to forum: $category/$forumId")
+                navController.navigate("institution_forum/$category/$forumId")
             }
 
             "chat_message", "new_message", "group_message" -> {
@@ -187,18 +204,8 @@ private fun handleNotificationNavigation(
                 }
             }
 
-            "new_thread", "forum" -> {
-                val forumId = notification.forumId ?: return
-                val category = notification.category ?: "marketpotential"
-
-                Log.d("Notifications", "Navigating to forum: $category/$forumId")
-
-                navController.navigate("institution_forum/$category/$forumId")   // Make sure this route matches your NavGraph
-            }
-
-            "activity_reminder" -> {                    // ← ADD THIS
+            "activity_reminder" -> {
                 notification.activityId?.let { activityId ->
-                    Log.d("Notifications", "Navigating to activity: $activityId")
                     navController.navigate("partners?highlightActivity=$activityId")
                 } ?: run {
                     navController.navigate("partners")
@@ -210,7 +217,7 @@ private fun handleNotificationNavigation(
             }
         }
     } catch (e: Exception) {
-        Log.e("Notifications", "Failed to navigate", e)
+        Log.e("Notifications", "Failed to navigate from notification", e)
     }
 }
 

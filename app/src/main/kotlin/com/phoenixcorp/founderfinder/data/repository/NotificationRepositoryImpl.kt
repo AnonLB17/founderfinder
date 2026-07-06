@@ -71,7 +71,7 @@ class NotificationRepositoryImpl @Inject constructor(
         threadId: String?,
         commentId: String?,
         messageId: String?,
-        category: String?,
+        category: String?,           // Make sure this is received
         activityId: String?,
         eventTime: Long?,
         activityType: String?,
@@ -79,18 +79,21 @@ class NotificationRepositoryImpl @Inject constructor(
         organizationName: String?
     ) {
         try {
-            Log.d(TAG, "Creating notification for senderId: $senderId | type: $type | messageId: $messageId")
+            Log.d(TAG, "Creating notification - type: $type, forumId: $forumId, category: $category")
+
+            if (category.isNullOrBlank() && (type == "new_thread" || type == "forum")) {
+                Log.w(TAG, "Warning: Category is null for new_thread notification!")
+            }
 
             val senderProfile = getSenderProfile(senderId)
             val fullName = senderProfile.getFullName()
 
             val finalSenderName = when {
-                fullName.isNotBlank() && fullName != "Unknown User" -> fullName   // Prioritize profile
+                fullName.isNotBlank() && fullName != "Unknown User" -> fullName
                 senderName.isNotBlank() && senderName != "You" && senderName != "Anonymous" -> senderName
                 else -> "Unknown User"
             }
 
-            // GUARANTEED UNIQUE ID
             val notificationId = when {
                 messageId != null -> "chat_msg_$messageId"
                 threadId != null && forumId != null -> "${type}_${forumId}_$threadId"
@@ -123,6 +126,7 @@ class NotificationRepositoryImpl @Inject constructor(
                 "activityType" to activityType,
                 "organizationId" to organizationId,
                 "organizationName" to organizationName,
+                "category" to category,                    // ← Ensure this is saved
                 "screen" to (screen ?: when {
                     activityId != null -> "CalendarScreen"
                     chatId != null -> "PrivateChat"
@@ -140,7 +144,7 @@ class NotificationRepositoryImpl @Inject constructor(
                 .set(data, SetOptions.merge())
                 .await()
 
-            Log.d(TAG, "✅ Created $type notification for $userId with ID: $notificationId")
+            Log.d(TAG, "✅ Created $type notification for $userId with ID: $notificationId | category=$category")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create notification", e)
         }

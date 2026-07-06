@@ -92,25 +92,34 @@ fun ThreadScreen(
         ) {
             // === PINNED ORIGINAL THREAD ===
             thread?.let { t ->
-                var displayName by remember { mutableStateOf(t.creatorName ?: "Anonymous") }
+                var displayName by remember { mutableStateOf(t.creatorName ?: "User") }
                 var displayProfilePic by remember { mutableStateOf<String?>(null) }
 
+                // Fetch full profile for pinned thread
                 LaunchedEffect(t.creatorId) {
-                    if ((t.creatorName.isNullOrBlank() || t.creatorName == "Anonymous") && t.creatorId.isNotEmpty()) {
+                    if (t.creatorId.isNotEmpty()) {
                         try {
-                            val doc = FirebaseFirestore.getInstance()
-                                .collection("profiles")
+                            Log.d("ThreadScreen", "Fetching profile for pinned thread creator: ${t.creatorId}")
+                            val firestore = FirebaseFirestore.getInstance()
+                            val profileDoc = firestore.collection("profiles")
                                 .document(t.creatorId)
                                 .get()
                                 .await()
-                            if (doc.exists()) {
-                                val first = doc.getString("firstName") ?: ""
-                                val last = doc.getString("lastName") ?: ""
-                                displayName = "$first $last".trim().ifBlank { "Anonymous" }
-                                displayProfilePic = doc.getString("profilePicture")
+
+                            if (profileDoc.exists()) {
+                                val firstName = profileDoc.getString("firstName") ?: ""
+                                val lastName = profileDoc.getString("lastName") ?: ""
+                                val fullName = "$firstName $lastName".trim()
+
+                                if (fullName.isNotBlank()) {
+                                    displayName = fullName
+                                }
+
+                                displayProfilePic = profileDoc.getString("profilePicture")
+                                Log.d("ThreadScreen", "Pinned thread profile loaded: $displayName | pic=${displayProfilePic != null}")
                             }
                         } catch (e: Exception) {
-                            Log.e("ThreadScreen", "Failed to load thread creator profile", e)
+                            Log.e("ThreadScreen", "Failed to load pinned thread creator profile", e)
                         }
                     }
                 }
@@ -282,7 +291,7 @@ private fun postComment(
     threadViewModel: ThreadViewModel,
     auth: FirebaseAuth,
     firestore: FirebaseFirestore,
-    category: String,
+    category: String,           // From route
     forumId: String,
     threadId: String
 ) {
@@ -290,7 +299,6 @@ private fun postComment(
 
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            // Fetch real sender name from profile
             val profileDoc = firestore.collection("profiles")
                 .document(currentUser.uid)
                 .get()
@@ -298,7 +306,7 @@ private fun postComment(
 
             val profile = profileDoc.toObject(UserProfile::class.java)
             val realName = "${profile?.firstName ?: ""} ${profile?.lastName ?: ""}".trim()
-                .ifBlank { currentUser.displayName ?: "Anonymous" }
+                .ifBlank { currentUser.displayName ?: "User" }
 
             val profilePicture = profile?.profilePicture ?: currentUser.photoUrl?.toString() ?: ""
 
@@ -306,18 +314,21 @@ private fun postComment(
                 id = UUID.randomUUID().toString(),
                 creatorId = currentUser.uid,
                 creatorName = realName,
-                creatorProfilePicture = currentUser.photoUrl?.toString() ?: profile?.profilePicture ?: "",  // ← Improved
+                creatorProfilePicture = profilePicture,
                 message = inputText,
                 timestamp = System.currentTimeMillis(),
                 threadId = threadId,
                 forumId = forumId,
-                category = category.ifBlank { "requestedsolutions" },
+                category = category,                    // Use passed category
                 parentId = parentId,
-                depth = if (parentId == null) 1 else 2
+                depth = if (parentId == null) 0 else 1   // 0 = top level, 1+ = reply
             )
 
-            // Create comment (this will trigger notification)
+            val isReply = parentId != null && parentId != "none"
+
             threadViewModel.createComment(newComment)
+
+            Log.d("postComment", "Comment created - isReply=$isReply, category=$category")
 
         } catch (e: Exception) {
             Log.e("postComment", "Error creating comment", e)

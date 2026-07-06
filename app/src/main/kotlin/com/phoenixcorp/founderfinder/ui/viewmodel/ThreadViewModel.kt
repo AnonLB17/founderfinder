@@ -19,10 +19,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ThreadViewModel @Inject constructor(
-    private val createCommentUseCase: CreateCommentUseCase   // ← Add this line
+    private val createCommentUseCase: CreateCommentUseCase
 ) : ViewModel() {
-
-    // ... rest of your code stays the same
 
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -35,6 +33,9 @@ class ThreadViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     // Persistent favorite cache (survives navigation)
     private val favoritedCache = mutableSetOf<String>()
@@ -57,15 +58,17 @@ class ThreadViewModel @Inject constructor(
     fun loadThread(category: String, forumId: String, threadId: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
+
             try {
                 Log.d("ThreadViewModel", "Trying to load thread: category=$category, forum=$forumId, thread=$threadId")
 
-                // Load user favorites once
                 if (favoritedCache.isEmpty()) loadUserFavorites()
 
-                var threadDoc = firestore.collection("forums")
+                // Try legacy path first
+                var threadDoc = firestore.collection("category")
                     .document(category)
-                    .collection("forums")
+                    .collection("forum")
                     .document(forumId)
                     .collection("threads")
                     .document(threadId)
@@ -73,10 +76,10 @@ class ThreadViewModel @Inject constructor(
                     .await()
 
                 if (!threadDoc.exists()) {
-                    Log.w("ThreadViewModel", "Not found in /forums/... Trying /category/... path")
-                    threadDoc = firestore.collection("category")
+                    Log.w("ThreadViewModel", "Not found in legacy path, trying new path")
+                    threadDoc = firestore.collection("categories")
                         .document(category)
-                        .collection("forum")
+                        .collection("forums")
                         .document(forumId)
                         .collection("threads")
                         .document(threadId)
@@ -89,10 +92,16 @@ class ThreadViewModel @Inject constructor(
                     Log.d("ThreadViewModel", "✅ Thread loaded successfully!")
                 } else {
                     Log.e("ThreadViewModel", "Thread still not found!")
+                    _error.value = "Thread not found"
+                    return@launch
                 }
 
+                // Load comments
                 val baseRef = if (threadDoc.exists() &&
-                    firestore.collection("category").document(category).collection("forum").document(forumId).collection("threads").document(threadId).get().await().exists()) {
+                    firestore.collection("category").document(category)
+                        .collection("forum").document(forumId)
+                        .collection("threads").document(threadId).get().await().exists()) {
+
                     firestore.collection("category")
                         .document(category)
                         .collection("forum")
@@ -100,7 +109,7 @@ class ThreadViewModel @Inject constructor(
                         .collection("threads")
                         .document(threadId)
                 } else {
-                    firestore.collection("forums")
+                    firestore.collection("categories")
                         .document(category)
                         .collection("forums")
                         .document(forumId)
@@ -119,10 +128,11 @@ class ThreadViewModel @Inject constructor(
                     raw.copy(isFavorited = isFav)
                 }
 
-                Log.d("ThreadViewModel", "✅ Loaded ${commentsSnapshot.size()} comments from comments subcollection")
+                Log.d("ThreadViewModel", "✅ Loaded ${commentsSnapshot.size()} comments")
 
             } catch (e: Exception) {
                 Log.e("ThreadViewModel", "Error loading thread or comments", e)
+                _error.value = "Failed to load thread or comments"
             } finally {
                 _isLoading.value = false
             }
@@ -132,19 +142,22 @@ class ThreadViewModel @Inject constructor(
     fun createComment(comment: Comment) {
         viewModelScope.launch {
             try {
-                val category = comment.category.ifBlank { "requestedsolutions" }
+                val category = comment.category.ifBlank { "" }
 
-                // Use the UseCase (this triggers notification)
+                val isReplyToComment = comment.depth >= 1 || (comment.parentId != null && comment.parentId != "none")
+
+                Log.d("ThreadViewModel", "Creating comment - depth=${comment.depth}, isReply=$isReplyToComment")
+
                 val result = createCommentUseCase(
                     comment = comment,
                     threadOwnerId = _thread.value?.creatorId ?: "",
                     threadTitle = _thread.value?.message?.take(50) ?: "Thread",
-                    isReplyToComment = false
+                    isReplyToComment = isReplyToComment
                 )
 
                 if (result.isSuccess) {
                     loadThread(category, comment.forumId, comment.threadId)
-                    Log.d("ThreadViewModel", "✅ Comment created successfully")
+                    Log.d("ThreadViewModel", "✅ Comment created successfully (reply=$isReplyToComment)")
                 } else {
                     Log.e("ThreadViewModel", "Failed to create comment", result.exceptionOrNull())
                 }
@@ -158,7 +171,7 @@ class ThreadViewModel @Inject constructor(
         viewModelScope.launch {
             val currentUserId = auth.currentUser?.uid ?: return@launch
             val thread = _thread.value ?: return@launch
-            val category = thread.category.ifBlank { "requestedsolutions" }
+            val category = thread.category.ifBlank { "" }
 
             try {
                 val commentRef = firestore.collection("category")
@@ -203,23 +216,16 @@ class ThreadViewModel @Inject constructor(
     fun favoriteComment(commentId: String, isFavoriting: Boolean) {
         viewModelScope.launch {
             val thread = _thread.value ?: return@launch
-            val category = thread.category.ifBlank { "requestedsolutions" }
+            val category = thread.category.ifBlank { "" }
             val userId = auth.currentUser?.uid ?: return@launch
 
             try {
-                // Update local cache
-                if (isFavoriting) {
-                    favoritedCache.add(commentId)
-                } else {
-                    favoritedCache.remove(commentId)
-                }
+                if (isFavoriting) favoritedCache.add(commentId) else favoritedCache.remove(commentId)
 
-                // Optimistic UI update
                 _comments.value = _comments.value.map { comment ->
                     if (comment.id == commentId) comment.copy(isFavorited = isFavoriting) else comment
                 }
 
-                // Update comment document
                 val commentRef = firestore.collection("category")
                     .document(category)
                     .collection("forum")
@@ -231,7 +237,6 @@ class ThreadViewModel @Inject constructor(
 
                 commentRef.update("isFavorited", isFavoriting).await()
 
-                // Persist to user profile for permanence
                 val userRef = firestore.collection("profiles").document(userId)
                 if (isFavoriting) {
                     userRef.update("favoritedComments", FieldValue.arrayUnion(commentId)).await()
@@ -239,7 +244,7 @@ class ThreadViewModel @Inject constructor(
                     userRef.update("favoritedComments", FieldValue.arrayRemove(commentId)).await()
                 }
 
-                Log.d("ThreadViewModel", "✅ Toggled favorite: $commentId -> $isFavoriting (persisted permanently)")
+                Log.d("ThreadViewModel", "✅ Toggled favorite: $commentId -> $isFavoriting")
             } catch (e: Exception) {
                 Log.e("ThreadViewModel", "Failed to favorite comment", e)
             }

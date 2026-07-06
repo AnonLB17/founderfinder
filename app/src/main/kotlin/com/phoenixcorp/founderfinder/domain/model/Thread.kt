@@ -5,7 +5,7 @@ data class Thread(
     val forumId: String = "",           // ← Critical for navigation
     val category: String = "",
     val creatorId: String = "",
-    val creatorName: String = "Anonymous",
+    val creatorName: String = "",
     val creatorProfilePicture: String = "",
     val message: String = "",
     val timestamp: Long = 0L,

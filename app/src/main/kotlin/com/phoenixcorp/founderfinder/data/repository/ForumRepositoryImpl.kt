@@ -1,7 +1,9 @@
 package com.phoenixcorp.founderfinder.data.repository
 
+import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.domain.model.Comment
+import com.phoenixcorp.founderfinder.domain.model.Forum
 import com.phoenixcorp.founderfinder.domain.model.ForumPost
 import com.phoenixcorp.founderfinder.domain.model.ForumReply
 import com.phoenixcorp.founderfinder.domain.model.Thread
@@ -16,7 +18,35 @@ class ForumRepositoryImpl @Inject constructor(
     private val threadRepository: ThreadRepository
 ) : ForumRepository {
 
-    // Delegate all thread operations to ThreadRepository
+    // ==================== FORUM METADATA (Legacy Path Only) ====================
+
+    override suspend fun getForum(category: String, forumId: String): Forum? {
+        return try {
+            val doc = firestore.collection("category")
+                .document(category)
+                .collection("forum")
+                .document(forumId)
+                .get()
+                .await()
+
+            if (doc.exists()) {
+                Log.d("ForumRepository", "✅ Found forum in legacy path: category/$category/forum/$forumId")
+                return doc.toObject(Forum::class.java)?.copy(
+                    id = forumId,
+                    category = category
+                )
+            } else {
+                Log.w("ForumRepository", "Forum not found: category/$category/forum/$forumId")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("ForumRepository", "Error loading forum", e)
+            null
+        }
+    }
+
+    // ==================== THREAD OPERATIONS (Delegated) ====================
+
     override suspend fun createThread(thread: Thread): Result<String> =
         threadRepository.createThread(thread)
 
@@ -53,28 +83,38 @@ class ForumRepositoryImpl @Inject constructor(
     override fun getRepliesForComment(commentId: String): Flow<List<Comment>> =
         threadRepository.getRepliesForComment(commentId)
 
-    // Existing Forum methods (Posts, etc.)
+    // New methods from ThreadRepository interface
+    override suspend fun getCommentsForThread(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): List<Comment> = threadRepository.getCommentsForThread(category, forumId, threadId)
+
+    override fun getCommentsFlowForThread(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): Flow<List<Comment>> = threadRepository.getCommentsFlowForThread(category, forumId, threadId)
+
+    // ==================== LEGACY FORUM POSTS ====================
+
     override suspend fun createPost(post: ForumPost): Result<String> {
-        // your existing implementation
         return Result.success("")
     }
 
     override suspend fun getPostsByCategory(category: String): List<ForumPost> {
-        // your existing implementation
         return emptyList()
     }
 
     override suspend fun getPostsBySchool(school: String): List<ForumPost> {
-        // your existing implementation
         return emptyList()
     }
 
     override suspend fun likePost(postId: String) {
-        // your existing implementation
+        // TODO
     }
 
     override fun getPostReplies(postId: String): Flow<List<ForumReply>> {
-        // your existing implementation
         return kotlinx.coroutines.flow.flowOf(emptyList())
     }
 }

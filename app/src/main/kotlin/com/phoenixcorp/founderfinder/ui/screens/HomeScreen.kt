@@ -57,7 +57,7 @@ fun HomeScreen(
 
     // Load notifications (updated method)
     LaunchedEffect(Unit) {
-        notificationsViewModel.loadAllNotifications()
+        notificationsViewModel.refreshNotifications()  // ← Updated
     }
 
     // Fetch trending forums

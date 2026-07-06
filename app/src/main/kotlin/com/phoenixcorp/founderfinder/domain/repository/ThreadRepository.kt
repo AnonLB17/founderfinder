@@ -4,6 +4,11 @@ import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Repository interface for Thread and Comment operations.
+ * All operations assume the following Firestore structure:
+ * categories/{category}/forums/{forumId}/threads/{threadId}
+ */
 interface ThreadRepository {
 
     /**
@@ -63,4 +68,22 @@ interface ThreadRepository {
      * Real-time listener for replies to a specific comment
      */
     fun getRepliesForComment(commentId: String): Flow<List<Comment>>
+
+    /**
+     * Optional: Get comments for a specific thread (paginated or full)
+     */
+    suspend fun getCommentsForThread(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): List<Comment>
+
+    /**
+     * Real-time flow for comments on a thread
+     */
+    fun getCommentsFlowForThread(
+        category: String,
+        forumId: String,
+        threadId: String
+    ): Flow<List<Comment>>
 }
