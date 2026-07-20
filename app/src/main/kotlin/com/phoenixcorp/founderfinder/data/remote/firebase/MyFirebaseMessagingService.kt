@@ -13,39 +13,27 @@ import com.phoenixcorp.founderfinder.MainActivity
 import com.phoenixcorp.founderfinder.R
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
-    private val TAG = "FCM"
+
+    private val TAG = "FCM_Service"
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        Log.d(TAG, "📩 FCM Received. Full Data: ${remoteMessage.data}")
+        Log.d(TAG, "📩 FCM Received from: ${remoteMessage.from}")
+        Log.d(TAG, "Data: ${remoteMessage.data}")
+        Log.d(TAG, "Notification: ${remoteMessage.notification}")
 
         val data = remoteMessage.data
 
-        val senderName = data["senderName"] ?: remoteMessage.notification?.title ?: "Unknown"
-        val title = data["title"] ?: "New Activity from $senderName"
+        val title = data["title"] ?: remoteMessage.notification?.title ?: "FounderFinder"
         val body = data["body"] ?: remoteMessage.notification?.body ?: "New update"
 
         val screen = data["screen"] ?: data["type"] ?: ""
         val chatId = data["chatId"]
         val forumId = data["forumId"]
-        val category = data["category"]
         val threadId = data["threadId"]
         val activityId = data["activityId"]
-        val eventTime = data["eventTime"]?.toLongOrNull()
 
-        Log.d(TAG, "Processing: screen=$screen, activityId=$activityId, threadId=$threadId")
-
-        sendNotification(
-            title = title,
-            body = body,
-            screen = screen,
-            chatId = chatId,
-            forumId = forumId,
-            category = category,
-            threadId = threadId,
-            activityId = activityId,
-            eventTime = eventTime
-        )
+        sendNotification(title, body, screen, chatId, forumId, threadId, activityId)
     }
 
     private fun sendNotification(
@@ -54,16 +42,18 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         screen: String,
         chatId: String?,
         forumId: String?,
-        category: String?,
         threadId: String?,
-        activityId: String? = null,
-        eventTime: Long? = null
+        activityId: String?
     ) {
         val channelId = "founderfinder_notifications"
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "FounderFinder Notifications", NotificationManager.IMPORTANCE_HIGH).apply {
+            val channel = NotificationChannel(
+                channelId,
+                "FounderFinder Notifications",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
                 enableVibration(true)
                 setShowBadge(true)
             }
@@ -71,20 +61,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
-
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("screen", screen)
             putExtra("type", screen)
-
             chatId?.let { putExtra("chatId", it) }
             forumId?.let { putExtra("forumId", it) }
-            category?.let { putExtra("category", it) }
             threadId?.let { putExtra("threadId", it) }
             activityId?.let { putExtra("activityId", it) }
-            eventTime?.let { putExtra("eventTime", it) }
         }
 
-        val requestCode = (activityId ?: threadId ?: chatId ?: forumId ?: "default").hashCode()
+        val requestCode = (activityId ?: threadId ?: chatId ?: "default").hashCode()
 
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -103,6 +89,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .build()
 
         notificationManager.notify(requestCode, notification)
-        Log.d(TAG, "🔔 Notification displayed → screen=$screen, activityId=$activityId, threadId=$threadId")
+        Log.d(TAG, "🔔 Notification shown: $title")
+    }
+
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        Log.d(TAG, "🔑 New FCM Token: $token")
+        // TODO: Send token to your backend here
     }
 }

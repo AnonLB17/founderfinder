@@ -94,7 +94,7 @@ fun AppNavGraph(
                     modifier = modifier.padding(paddingValues)
                 ) {
                     composable(Screen.Splash.route) {
-                        ImprovedSplashScreen(navController)   // Use the improved version
+                        SplashScreen(navController)
                     }
                     composable(Screen.SignUp.route) {
                         SignUpScreen(navController)

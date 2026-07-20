@@ -16,8 +16,8 @@ android {
         applicationId = "com.phoenixcorp.founderfinder"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.5"
+        versionCode = 13
+        versionName = "1.0.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -86,4 +86,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.room:room-runtime:2.6.1")
+// match what WorkManager expects
 }

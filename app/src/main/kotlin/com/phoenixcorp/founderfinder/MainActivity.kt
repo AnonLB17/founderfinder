@@ -5,8 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,7 +23,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.phoenixcorp.founderfinder.navigation.AppNavGraph
-import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.theme.FounderfinderTheme
 import com.phoenixcorp.founderfinder.ui.viewmodel.notifications.NotificationsViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -45,7 +42,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var snackbarHostState: SnackbarHostState
     private lateinit var notificationsViewModel: NotificationsViewModel
 
-    // Permission Launchers
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -70,82 +66,85 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setupPersistentAuth()
-
-        // Request permissions
         requestPermissionsIfNeeded()
 
         val firebaseAppCheck = FirebaseAppCheck.getInstance()
         firebaseAppCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
-        Log.d("MainActivity", "Using DebugAppCheckProviderFactory")
 
         setContent {
             FounderfinderTheme {
                 snackbarHostState = remember { SnackbarHostState() }
                 navController = rememberNavController()
                 notificationsViewModel = hiltViewModel()
-                AppNavGraph(navController = navController, snackbarHostState = snackbarHostState)
+
+                // NavGraph now correctly starts at Splash
+                AppNavGraph(
+                    navController = navController,
+                    snackbarHostState = snackbarHostState
+                )
             }
         }
 
-        // Force start notification listener on physical device
+        // Refresh notifications after a short delay (non-blocking)
         lifecycleScope.launch {
             delay(800)
             notificationsViewModel.refreshNotifications()
-            Log.d("MainActivity", "Forced notification listener start on physical device")
         }
 
-        Handler(Looper.getMainLooper()).postDelayed({
-            checkAuthAndNavigate()
+        // Handle deep links / FCM after composition is ready
+        // NOTE: We NO LONGER force navigate based on auth here.
+        // That responsibility moved to SplashScreen (MVVM + clean).
+        // This prevents the race that was skipping Splash.
+        window.decorView.post {
             handleIntent(intent)
-            fetchFcmToken()
+            if (auth.currentUser != null) {
+                fetchFcmToken()
+            }
             createNotificationChannel()
-        }, 400)
+        }
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "FounderFinder Notifications"
             val descriptionText = "Notifications for new threads, comments, and replies"
-            val importance = android.app.NotificationManager.IMPORTANCE_DEFAULT
-            val channel = android.app.NotificationChannel("default_channel", name, importance).apply {
+            val importance = android.app.NotificationManager.IMPORTANCE_HIGH
+            val channel = android.app.NotificationChannel(
+                "founderfinder_notifications",
+                name,
+                importance
+            ).apply {
                 description = descriptionText
+                enableVibration(true)
             }
-            val notificationManager: android.app.NotificationManager =
-                getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val notificationManager =
+                getSystemService(android.content.Context.NOTIFICATION_SERVICE)
+                        as android.app.NotificationManager
             notificationManager.createNotificationChannel(channel)
-            Log.d("MainActivity", "Notification channel created")
         }
     }
 
     private fun requestPermissionsIfNeeded() {
-        // Notification Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
-        // Location Permissions
         val locationPermissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         )
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestLocationPermissionLauncher.launch(locationPermissions)
-        }
-    }
-
-    private fun checkAuthAndNavigate() {
-        val currentUser = auth.currentUser
-        if (currentUser != null) {
-            Log.d("MainActivity", "✅ User already signed in: ${currentUser.uid}")
-            try {
-                navController.navigate(Screen.Home.route) {
-                    popUpTo(0) { saveState = true }
-                }
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Navigation to home failed", e)
-            }
         }
     }
 
@@ -154,6 +153,8 @@ class MainActivity : ComponentActivity() {
             val user = firebaseAuth.currentUser
             if (user != null) {
                 Log.d("Auth", "✅ User signed in persistently: ${user.uid}")
+            } else {
+                Log.d("Auth", "User signed out")
             }
         }
     }
@@ -173,46 +174,41 @@ class MainActivity : ComponentActivity() {
         val category = extras.getString("category")
         val chatId = extras.getString("chatId")
         val activityId = extras.getString("activityId")
-        val notificationId = extras.getString("notificationId")
 
-        Log.d("MainActivity", "handleIntent → screen=$screen, category=$category, threadId=$threadId, forumId=$forumId")
+        Log.d("MainActivity", "handleIntent → screen=$screen, threadId=$threadId, forumId=$forumId")
 
-        // Mark notification as read
-        if (!notificationId.isNullOrEmpty()) {
-            notificationsViewModel.markAsRead(notificationId)
+        // Mark notification as read if present
+        extras.getString("notificationId")?.let {
+            notificationsViewModel.markAsRead(it)
         }
 
+        // Only navigate if we have a valid navController and user is authenticated
+        // (deep links from notifications usually require auth)
+        if (!::navController.isInitialized) return
+
         when {
-            // === THREAD / COMMENT NAVIGATION ===
-            threadId != null && forumId != null -> {
-                val cat = category?.ifBlank { "" } ?: ""
-                val route = "thread/$cat/$forumId/$threadId"
-
-                Log.d("MainActivity", "✅ Navigating to Thread: $route")
+            threadId != null -> {
+                val route = "thread/${category.orEmpty()}/$forumId/$threadId"
+                Log.d("MainActivity", "Navigating to Thread: $route")
                 navController.navigate(route) {
                     launchSingleTop = true
                 }
             }
 
-            // === FORUM NAVIGATION ===
             forumId != null -> {
-                val cat = category?.ifBlank { "" } ?: ""
-                val route = "institution_forum/$cat/$forumId"
-
-                Log.d("MainActivity", "✅ Navigating to Forum: $route")
+                val route = "institution_forum/${category.orEmpty()}/$forumId"
+                Log.d("MainActivity", "Navigating to Forum: $route")
                 navController.navigate(route) {
                     launchSingleTop = true
                 }
             }
 
-            // === CHAT NAVIGATION ===
             chatId != null -> {
                 navController.navigate("private_chat/$chatId") {
                     launchSingleTop = true
                 }
             }
 
-            // === ACTIVITY NAVIGATION ===
             activityId != null -> {
                 navController.navigate("partners?highlightActivity=$activityId") {
                     launchSingleTop = true
@@ -220,7 +216,7 @@ class MainActivity : ComponentActivity() {
             }
 
             else -> {
-                Log.w("MainActivity", "Unknown navigation type: $screen")
+                Log.w("MainActivity", "No specific route for screen: $screen")
             }
         }
     }
@@ -234,7 +230,13 @@ class MainActivity : ComponentActivity() {
                     try {
                         firestore.collection("profiles")
                             .document(userId)
-                            .set(mapOf("fcmToken" to token, "updatedAt" to System.currentTimeMillis()), com.google.firebase.firestore.SetOptions.merge())
+                            .set(
+                                mapOf(
+                                    "fcmToken" to token,
+                                    "updatedAt" to System.currentTimeMillis()
+                                ),
+                                com.google.firebase.firestore.SetOptions.merge()
+                            )
                             .await()
                         Log.d("FCM", "Token saved for user: $userId")
                     } catch (e: Exception) {
