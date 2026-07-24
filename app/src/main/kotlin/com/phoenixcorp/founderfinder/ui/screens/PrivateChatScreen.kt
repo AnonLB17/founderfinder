@@ -26,6 +26,8 @@ import com.google.firebase.auth.FirebaseUser
 import com.phoenixcorp.founderfinder.domain.model.ChatMessage
 import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.OrganizationCard
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.ui.viewmodel.ChatViewModel
@@ -52,6 +54,13 @@ fun PrivateChatScreen(
     chatViewModel: ChatViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
     val coroutineScope = rememberCoroutineScope()
 
     // PrivateChatViewModel states
@@ -150,7 +159,10 @@ fun PrivateChatScreen(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { showOrgDialog = true }) {
+                IconButton(onClick = {
+                    if (!perms.requireSendMessage(context)) return@IconButton
+                    showOrgDialog = true
+                }) {
                     Icon(Icons.Default.AttachFile, contentDescription = "Attach Organization")
                 }
 
@@ -161,22 +173,24 @@ fun PrivateChatScreen(
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
+                        if (!perms.requireSendMessage(context)) return@KeyboardActions
                         sendTextMessage(
                             text = messageText,
-                            chatId = conversationId,           // or sortedConversationId
-                            recipientId = recipientId ?: "",   // ← Important
+                            chatId = conversationId,
+                            recipientId = recipientId ?: "",
                             currentUser = currentUser,
                             chatViewModel = chatViewModel,
                             onSuccess = { messageText = "" }
                         )
                     }),
-                    enabled = !isSending
+                    enabled = !isSending && perms.canSendMessage
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Button(
                     onClick = {
+                        if (!perms.requireSendMessage(context)) return@Button
                         sendTextMessage(
                             text = messageText,
                             chatId = conversationId,
@@ -186,9 +200,9 @@ fun PrivateChatScreen(
                             onSuccess = { messageText = "" }
                         )
                     },
-                    enabled = messageText.isNotBlank() && !isSending
+                    enabled = messageText.isNotBlank() && !isSending && perms.canSendMessage
                 ) {
-                    Text("Send")
+                    Text(if (perms.canSendMessage) "Send" else "View only")
                 }
             }
         }

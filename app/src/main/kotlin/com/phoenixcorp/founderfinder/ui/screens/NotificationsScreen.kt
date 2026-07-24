@@ -24,7 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.google.firebase.Timestamp
 import com.phoenixcorp.founderfinder.domain.model.Notification
-import com.phoenixcorp.founderfinder.navigation.ScreenWithHeader
+import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.ui.viewmodel.notifications.NotificationsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,13 +43,20 @@ fun NotificationsScreen(
         viewModel.refreshNotifications()
     }
 
-    // Refresh when returning to this screen
-    LaunchedEffect(Unit) {
-        viewModel.refreshNotifications()
-    }
-
-    ScreenWithHeader(navController = navController, title = "Activity") {
-        Column {
+    Scaffold(
+        topBar = {
+            ScreenBanner(
+                title = { Text("Activity") },
+                navController = navController,
+                showBackButton = true
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
             if (unreadCount > 0) {
                 Text(
                     text = "$unreadCount unread",
@@ -127,9 +134,7 @@ fun NotificationItemCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Inside NotificationItemCard, in the Column:
             Column(modifier = Modifier.weight(1f)) {
-                // Show sender name + title
                 Text(
                     text = "${notification.displaySenderName} • ${notification.title}",
                     style = MaterialTheme.typography.titleMedium,
@@ -143,7 +148,6 @@ fun NotificationItemCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Time
                 Text(
                     text = notification.getRelativeTime(),
                     style = MaterialTheme.typography.labelSmall,
@@ -151,7 +155,6 @@ fun NotificationItemCard(
                 )
             }
 
-            // Delete Button (works on unread notifications)
             IconButton(onClick = { onDelete(notification.id) }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
@@ -177,22 +180,25 @@ private fun handleNotificationNavigation(
     navController: NavHostController,
     notification: Notification
 ) {
-    Log.d("Notifications", "Navigating from notification: type=${notification.type}, " +
-            "threadId=${notification.threadId}, forumId=${notification.forumId}, category=${notification.category}")
+    Log.d(
+        "Notifications",
+        "Navigating from notification: type=${notification.type}, " +
+                "threadId=${notification.threadId}, forumId=${notification.forumId}, category=${notification.category}"
+    )
 
     try {
         when (notification.type) {
             "new_comment", "comment_reply" -> {
                 val forumId = notification.forumId ?: return
                 val threadId = notification.threadId ?: return
-                val category = notification.category ?: return   // Fail if no category
+                val category = notification.category ?: return
 
                 navController.navigate("thread/$category/$forumId/$threadId")
             }
 
             "new_thread", "forum" -> {
                 val forumId = notification.forumId ?: return
-                val category = notification.category ?: return   // Fail fast if missing
+                val category = notification.category ?: return
 
                 Log.d("Notifications", "Navigating to forum: $category/$forumId")
                 navController.navigate("institution_forum/$category/$forumId")

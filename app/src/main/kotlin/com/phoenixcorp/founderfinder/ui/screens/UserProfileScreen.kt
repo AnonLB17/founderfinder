@@ -51,9 +51,12 @@ fun UserProfileScreen(
                 },
                 navController = navController,
                 showBackButton = true,
-                showMailButton = true,           // ← Enabled
-                onMailClick = {
-                    navController.navigate(Screen.PrivateMessages.route)  // Navigate to Messages
+                // Investor / role switch: open SelectUserType (onboarding hub)
+                showInvestorAddButton = true,
+                onAddClick = {
+                    navController.navigate(Screen.OnboardingGraph.route) {
+                        launchSingleTop = true
+                    }
                 }
             )
         },
@@ -107,11 +110,14 @@ fun UserProfileScreen(
                             }
 
                             ProfileSection(title = "Founder Status") {
-                                val isFounder = user.isFounder ?: false
+                                // Treat non-empty founderEntries as founder even if isFounder
+                                // was never written / is false in Firestore.
+                                val isFounder = (user.isFounder == true) ||
+                                        user.founderEntries.isNotEmpty()
 
                                 if (isFounder) {
                                     Text(
-                                        text = "✅ Founder",
+                                        text = "Currently a Founder",
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))

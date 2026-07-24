@@ -26,6 +26,8 @@ import com.google.firebase.storage.FirebaseStorage
 import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -38,6 +40,13 @@ fun ForumCreationScreen(
     initialLocation: String? = null
 ) {
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
     val coroutineScope = rememberCoroutineScope()
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -116,7 +125,10 @@ fun ForumCreationScreen(
             Box(
                 modifier = Modifier
                     .size(150.dp)
-                    .clickable { imagePickerLauncher.launch("image/*") },
+                    .clickable {
+                        if (!perms.requireCreate(context, "upload an image")) return@clickable
+                        imagePickerLauncher.launch("image/*")
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -189,9 +201,10 @@ fun ForumCreationScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Submit Button
+            // Submit Button — blocked for spectators
             Button(
                 onClick = {
+                    if (!perms.requireCreate(context, "create a forum")) return@Button
                     coroutineScope.launch {
                         val currentUser = auth.currentUser
                         if (currentUser == null) {
@@ -273,9 +286,10 @@ fun ForumCreationScreen(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = perms.canCreate
             ) {
-                Text("Submit")
+                Text(if (perms.canCreate) "Submit" else "View only — cannot create")
             }
         }
     }

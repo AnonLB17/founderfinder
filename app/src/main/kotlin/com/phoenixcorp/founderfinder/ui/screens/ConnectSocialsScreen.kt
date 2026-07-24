@@ -1,144 +1,150 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
+import com.phoenixcorp.founderfinder.navigation.OnboardingSteps
 import com.phoenixcorp.founderfinder.navigation.Screen
-import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
-import com.phoenixcorp.founderfinder.ui.viewmodel.ConnectSocialsViewModel
+import com.phoenixcorp.founderfinder.ui.components.OnboardingScaffold
+import com.phoenixcorp.founderfinder.ui.viewmodel.OnboardingViewModel
 
 @Composable
 fun ConnectSocialsScreen(
     navController: NavHostController,
-    socialsViewModel: ConnectSocialsViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    onboardingViewModel: OnboardingViewModel
 ) {
-    val linkedin by socialsViewModel.linkedin.collectAsState()
-    val twitter by socialsViewModel.twitter.collectAsState()
-    val facebook by socialsViewModel.facebook.collectAsState()
-    val instagram by socialsViewModel.instagram.collectAsState()
-    val website by socialsViewModel.website.collectAsState()
-    val isLoading by socialsViewModel.isLoading.collectAsState()
-    val errorMessage by socialsViewModel.errorMessage.collectAsState()
+    val profile by onboardingViewModel.profile.collectAsState()
+    val isLoading by onboardingViewModel.isLoading.collectAsState()
+    val errorMessage by onboardingViewModel.errorMessage.collectAsState()
+    val isInitialized by onboardingViewModel.isInitialized.collectAsState()
+
+    var linkedin by remember { mutableStateOf("") }
+    var twitter by remember { mutableStateOf("") }
+    var facebook by remember { mutableStateOf("") }
+    var instagram by remember { mutableStateOf("") }
+    var website by remember { mutableStateOf("") }
+
+    LaunchedEffect(profile, isInitialized) {
+        if (isInitialized) {
+            linkedin = profile.linkedinUrl.orEmpty()
+            twitter = profile.twitterUrl.orEmpty()
+            facebook = profile.facebookUrl.orEmpty()
+            instagram = profile.instagramUrl.orEmpty()
+            website = profile.websiteUrl.orEmpty()
+        }
+    }
 
     val context = LocalContext.current
-    val currentUser = authViewModel.getCurrentUser()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Connect Socials",
-            style = MaterialTheme.typography.headlineLarge
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        OutlinedTextField(
-            value = linkedin,
-            onValueChange = { socialsViewModel.updateLinkedin(it) },
-            label = { Text("LinkedIn Profile URL") },
-            placeholder = { Text("https://linkedin.com/in/yourprofile") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = twitter,
-            onValueChange = { socialsViewModel.updateTwitter(it) },
-            label = { Text("Twitter / X Profile URL") },
-            placeholder = { Text("https://twitter.com/yourprofile") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = facebook,
-            onValueChange = { socialsViewModel.updateFacebook(it) },
-            label = { Text("Facebook Profile URL") },
-            placeholder = { Text("https://facebook.com/yourprofile") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = instagram,
-            onValueChange = { socialsViewModel.updateInstagram(it) },
-            label = { Text("Instagram Profile URL") },
-            placeholder = { Text("https://instagram.com/yourprofile") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = website,
-            onValueChange = { socialsViewModel.updateWebsite(it) },
-            label = { Text("Personal Website or Portfolio") },
-            placeholder = { Text("https://yourwebsite.com") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        errorMessage?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Button(
-            onClick = {
-                if (currentUser == null) {
-                    Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                socialsViewModel.saveSocials(currentUser.uid) { success ->
-                    if (success) {
-                        navController.navigate(Screen.IndustriesOfInterest.route) {
-                            popUpTo(Screen.ConnectSocials.route) { inclusive = true }
-                        }
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+    OnboardingScaffold(
+        navController = navController,
+        title = "Connect Socials",
+        showBack = true,
+        currentStep = 7,
+        totalSteps = OnboardingSteps.TOTAL_FOUNDER,
+        isLoading = isLoading && !isInitialized
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            } else {
-                Text("Next")
+            Text("Connect Socials", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = linkedin,
+                onValueChange = { linkedin = it },
+                label = { Text("LinkedIn Profile URL") },
+                placeholder = { Text("https://linkedin.com/in/yourprofile") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = twitter,
+                onValueChange = { twitter = it },
+                label = { Text("Twitter / X Profile URL") },
+                placeholder = { Text("https://twitter.com/yourprofile") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = facebook,
+                onValueChange = { facebook = it },
+                label = { Text("Facebook Profile URL") },
+                placeholder = { Text("https://facebook.com/yourprofile") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = instagram,
+                onValueChange = { instagram = it },
+                label = { Text("Instagram Profile URL") },
+                placeholder = { Text("https://instagram.com/yourprofile") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = website,
+                onValueChange = { website = it },
+                label = { Text("Personal Website or Portfolio") },
+                placeholder = { Text("https://yourwebsite.com") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+
+            errorMessage?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    onboardingViewModel.updateSocials(linkedin, twitter, facebook, instagram, website)
+                    onboardingViewModel.saveDraft { success ->
+                        if (success) navController.navigate(Screen.IndustriesOfInterest.route)
+                        else Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                else Text("Next")
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ConnectSocialsScreenPreview() {
-    ConnectSocialsScreen(navController = rememberNavController())
 }

@@ -7,7 +7,6 @@ import com.google.firebase.firestore.PropertyName
 @Keep
 data class UserProfile(
     val userId: String = "",
-
     val email: String? = null,
 
     // Basic Info
@@ -28,10 +27,10 @@ data class UserProfile(
     // Ambition
     val ambitionStatement: String? = null,
 
-    // Role (Critical for Advisor/Partner search)
+    // Role
     val role: String = "FOUNDER",
 
-    // Advisor / Partner specific (flattened)
+    // Advisor / Partner / Investor
     val expertise: String? = null,
     val experienceYears: Int? = null,
     val skills: List<String> = emptyList(),
@@ -50,6 +49,9 @@ data class UserProfile(
     // Profile
     val profilePicture: String? = null,
 
+    // Onboarding complete flag (used by Splash / SignIn routing)
+    val onboardingComplete: Boolean = false,
+
     // Timestamps
     @get:PropertyName("createdAt")
     val createdAt: Long = System.currentTimeMillis(),
@@ -58,11 +60,10 @@ data class UserProfile(
     val updatedAt: Long = System.currentTimeMillis()
 ) : Parcelable {
 
-    // Manual Parcelable implementation (minimal)
     override fun describeContents(): Int = 0
 
     override fun writeToParcel(dest: android.os.Parcel, flags: Int) {
-        // Firebase + simple fields usually don't need full parceling for now
+        // Minimal – Firebase + simple fields don't need full parceling for navigation
     }
 }
 
@@ -112,16 +113,10 @@ fun User.toUserProfile(): UserProfile {
     )
 }
 
-// ====================== NOTIFICATION HELPER ======================
-
-/**
- * Helper to create sender info for Notifications from UserProfile
- */
 fun UserProfile.toNotificationSender(): Pair<String, String> {
     val fullName = listOfNotNull(firstName, lastName)
         .joinToString(" ")
         .trim()
         .ifBlank { "Unknown User" }
-
     return Pair(fullName, firstName ?: "")
 }

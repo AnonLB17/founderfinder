@@ -28,6 +28,8 @@ import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.domain.model.File
 import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch
@@ -48,6 +50,13 @@ fun OrganizationDetailsScreen(
     val currentUser = auth.currentUser
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
 
     var organization by remember { mutableStateOf<Organization?>(null) }
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
@@ -265,6 +274,7 @@ fun OrganizationDetailsScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Button(onClick = {
+                                if (!perms.requireUpdate(context, "accept an invitation")) return@Button
                                 coroutineScope.launch {
                                     try {
                                         // Update invitation status
@@ -307,6 +317,7 @@ fun OrganizationDetailsScreen(
                                 Text("Accept")
                             }
                             Button(onClick = {
+                                if (!perms.requireUpdate(context, "respond to an invitation")) return@Button
                                 coroutineScope.launch {
                                     try {
                                         firestore.collection("invitations")
@@ -355,6 +366,7 @@ fun OrganizationDetailsScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Button(onClick = {
+                            if (!perms.requireSendMessage(context)) return@Button
                             coroutineScope.launch {
                                 try {
                                     val conversationId = firestore.collection("conversations").add(

@@ -37,6 +37,8 @@ import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.domain.model.ChatMessage
 import com.phoenixcorp.founderfinder.domain.model.UserProfile
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -50,6 +52,13 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
     val firestore = Firebase.firestore
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
     val currentUser = auth.currentUser
     var messageText by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -59,6 +68,9 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var messageListener by remember { mutableStateOf<ListenerRegistration?>(null) }
     var hasError by remember { mutableStateOf(false) }
+    var showParticipants by remember { mutableStateOf(false) }
+    var creatorId by remember { mutableStateOf("") }
+    var participantIds by remember { mutableStateOf<List<String>>(emptyList()) }
 
     Log.d("GroupChat", "GroupChatScreen initialized with orgId: $orgId, user: ${currentUser?.uid}")
 
@@ -92,7 +104,8 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                 Log.d("GroupChat", "Organization name: $orgName")
 
                 // Check if user is a member
-                val creatorId = orgDoc.getString("creatorId") ?: ""
+                val orgCreatorId = orgDoc.getString("creatorId") ?: ""
+                creatorId = orgCreatorId
                 val partnerSnapshot = firestore.collection("organizations")
                     .document(orgId)
                     .collection("partners")
@@ -105,10 +118,11 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                     .get()
                     .await()
                 val collaboratorIds = collaboratorSnapshot.documents.mapNotNull { it.id }
-                val participantIds = (listOf(creatorId) + partnerIds + collaboratorIds).distinct()
-                Log.d("GroupChat", "Fetched participant IDs: $participantIds")
+                val ids = (listOf(orgCreatorId) + partnerIds + collaboratorIds).distinct()
+                participantIds = ids
+                Log.d("GroupChat", "Fetched participant IDs: $ids")
 
-                if (currentUser.uid !in participantIds) {
+                if (currentUser.uid !in ids) {
                     Log.e("GroupChat", "User ${currentUser.uid} is not a member of organization $orgId")
                     errorMessage = "You are not authorized to access this chat"
                     isLoading = false
@@ -119,7 +133,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
 
                 // Fetch user profiles, including current user
                 val profiles = mutableMapOf<String, UserProfile>()
-                participantIds.forEach { id ->
+                ids.forEach { id ->
                     try {
                         val profileDoc = firestore.collection("profiles").document(id).get().await()
                         profileDoc.toObject(UserProfile::class.java)?.let { profiles[id] = it }
@@ -259,6 +273,18 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                     Text("Retry")
                 }
             } else {
+                // Participants (creator can remove partners)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { showParticipants = true }) {
+                        Text("Participants (${participantIds.size})")
+                    }
+                }
+
                 // Messages
                 LazyColumn(
                     modifier = Modifier
@@ -388,6 +414,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
+                            if (!perms.requireSendMessage(context)) return@KeyboardActions
                             Log.d("GroupChat", "Keyboard send action triggered")
                             sendGroupMessage(
                                 currentUser,
@@ -408,6 +435,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
+                            if (!perms.requireSendMessage(context)) return@Button
                             Log.d("GroupChat", "Send button clicked")
                             sendGroupMessage(
                                 currentUser,
@@ -424,7 +452,7 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
                                 }
                             )
                         },
-                        enabled = messageText.isNotBlank() && currentUser != null
+                        enabled = messageText.isNotBlank() && currentUser != null && perms.canSendMessage
                     ) {
                         Icon(Icons.Default.Send, contentDescription = "Send Message")
                     }
@@ -433,7 +461,104 @@ fun GroupChatScreen(navController: NavHostController, orgId: String) {
             }
         }
     }
+
+
+    if (showParticipants) {
+        AlertDialog(
+            onDismissRequest = { showParticipants = false },
+            title = { Text("Participants") },
+            text = {
+                Column {
+                    participantIds.forEach { uid ->
+                        val profile = userProfiles[uid]
+                        val name = listOfNotNull(profile?.firstName, profile?.lastName)
+                            .joinToString(" ")
+                            .ifBlank { uid.take(8) }
+                        val isOrgCreator = uid == creatorId
+                        val iAmCreator = currentUser?.uid == creatorId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isOrgCreator) "$name (Owner)" else name,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            if (iAmCreator && !isOrgCreator) {
+                                TextButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            try {
+                                                removePartnerFromOrg(firestore, orgId, uid)
+                                                participantIds = participantIds.filter { it != uid }
+                                                userProfiles = userProfiles - uid
+                                                Toast.makeText(context, "Removed $name", Toast.LENGTH_SHORT).show()
+                                            } catch (e: Exception) {
+                                                Log.e("GroupChat", "Remove failed", e)
+                                                Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showParticipants = false }) { Text("Close") }
+            }
+        )
+    }
 }
+
+private suspend fun removePartnerFromOrg(
+    firestore: FirebaseFirestore,
+    orgId: String,
+    partnerId: String
+) {
+    val orgRef = firestore.collection("organizations").document(orgId)
+
+    // Membership docs — these are what PartnersScreen uses
+    orgRef.collection("partners").document(partnerId).delete().await()
+    orgRef.collection("collaborators").document(partnerId).delete().await()
+
+    // Org-level invite doc is keyed by invitee uid (best-effort)
+    try {
+        orgRef.collection("invitations").document(partnerId)
+            .set(mapOf("status" to "removed"), com.google.firebase.firestore.SetOptions.merge())
+            .await()
+    } catch (e: Exception) {
+        Log.w("GroupChat", "Org invitation update skipped: ${e.message}")
+    }
+
+    // Top-level invitations query often PERMISSION_DENIED for creators
+    // (rules only allow list when inviteeId/inviterId == auth.uid).
+    // Do not fail the whole remove if this is blocked.
+    try {
+        val invites = firestore.collection("invitations")
+            .whereEqualTo("inviteeId", partnerId)
+            .whereEqualTo("orgId", orgId)
+            .get()
+            .await()
+        invites.documents.forEach { doc ->
+            try {
+                doc.reference.update("status", "removed").await()
+            } catch (e: Exception) {
+                Log.w("GroupChat", "Invite ${doc.id} status update skipped: ${e.message}")
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("GroupChat", "Top-level invitations query skipped: ${e.message}")
+    }
+}
+
+
 
 private fun sendGroupMessage(
     currentUser: com.google.firebase.auth.FirebaseUser?,

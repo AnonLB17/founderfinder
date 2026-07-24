@@ -26,6 +26,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import com.phoenixcorp.founderfinder.domain.model.File
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -35,6 +37,13 @@ import java.util.UUID
 @Composable
 fun OrganizationFilesScreen(navController: NavHostController, orgId: String?) {
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
     val firestore = FirebaseFirestore.getInstance()
     val storage = FirebaseStorage.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -199,10 +208,14 @@ fun OrganizationFilesScreen(navController: NavHostController, orgId: String?) {
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Button(
-                                onClick = { filePickerLauncher.launch("*/*") },
-                                modifier = Modifier.fillMaxWidth()
+                                onClick = {
+                                    if (!perms.requireCreate(context, "upload a file")) return@Button
+                                    filePickerLauncher.launch("*/*")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = perms.canCreate
                             ) {
-                                Text("Select File")
+                                Text(if (perms.canCreate) "Select File" else "View only")
                             }
 
                             if (selectedFileUri != null) {
@@ -210,10 +223,13 @@ fun OrganizationFilesScreen(navController: NavHostController, orgId: String?) {
                                 Text("Selected: ${fileName.ifBlank { "Unnamed File" }}", style = MaterialTheme.typography.bodyMedium)
 
                                 Button(
-                                    onClick = { /* Upload logic remains the same */
+                                    onClick = {
+                                        if (!perms.requireCreate(context, "upload a file")) return@Button
+                                        /* Upload logic remains the same */
                                         // (Keep your existing upload coroutine here)
                                     },
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = perms.canCreate
                                 ) {
                                     Text("Upload File")
                                 }
@@ -255,8 +271,13 @@ fun OrganizationFilesScreen(navController: NavHostController, orgId: String?) {
                                     Text(file.type, style = MaterialTheme.typography.bodyMedium)
                                 }
 
-                                IconButton(onClick = { /* Delete logic */ }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                                if (perms.canDelete) {
+                                    IconButton(onClick = {
+                                        if (!perms.requireUpdate(context, "delete a file")) return@IconButton
+                                        /* Delete logic */
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }

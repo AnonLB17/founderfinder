@@ -33,6 +33,8 @@ import com.phoenixcorp.founderfinder.navigation.Screen
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.ui.viewmodel.notifications.NotificationsViewModel
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
@@ -48,6 +50,14 @@ fun HomeScreen(
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
     val context = LocalContext.current
+
+    // Spectator / role permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
+
 
     var forums by remember { mutableStateOf<List<Forum>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -207,9 +217,22 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Apply to top Canadian startup programs and funding opportunities tailored for founders like you.")
                         Spacer(modifier = Modifier.height(12.dp))
-                        Button(onClick = { /* TODO */ }, modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = {
+                                // Explore is view-only — OK for spectators.
+                                // If this later becomes "Apply", guard with perms.requireCreate(context, "apply").
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text("Explore Opportunities")
                         }
+
+                        // Example write gate (uncomment when you add create actions on Home):
+                        // if (perms.canCreate) {
+                        //     Button(onClick = { navController.navigate(Screen.IdeaCreation.route) }) {
+                        //         Text("Create Idea")
+                        //     }
+                        // }
                     }
                 }
             }

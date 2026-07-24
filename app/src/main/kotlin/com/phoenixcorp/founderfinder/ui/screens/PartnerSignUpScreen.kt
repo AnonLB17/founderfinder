@@ -193,7 +193,7 @@ fun PartnerSignUpScreen(navController: NavHostController) {
                             Toast.makeText(context, "Partner profile saved successfully!", Toast.LENGTH_LONG).show()
 
                             navController.navigate(Screen.PartnerSearchFeature.route) {
-                                popUpTo(Screen.PartnerSignUp.route) { inclusive = true }
+                                popUpTo(Screen.OnboardingGraph.route) { inclusive = true }
                             }
                         } catch (e: Exception) {
                             errorMessage = "Save failed: ${e.message}"

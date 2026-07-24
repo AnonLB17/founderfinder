@@ -61,4 +61,18 @@ class AuthViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * Signs the user out of Firebase Auth.
+     * Call this before navigating to Splash so the splash auth-check
+     * sees no currentUser and shows Get Started / Sign In.
+     */
+    fun signOut() {
+        try {
+            auth.signOut()
+            Log.d(TAG, "✅ User signed out")
+        } catch (e: Exception) {
+            Log.e(TAG, "Sign out error", e)
+        }
+    }
 }

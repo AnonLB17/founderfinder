@@ -193,7 +193,7 @@ fun AdvisorSignUpScreen(navController: NavHostController) {
                             Toast.makeText(context, "Advisor profile saved successfully!", Toast.LENGTH_LONG).show()
 
                             navController.navigate(Screen.AdvisorSearchFeature.route) {
-                                popUpTo(Screen.AdvisorSignUp.route) { inclusive = true }
+                                popUpTo(Screen.OnboardingGraph.route) { inclusive = true }
                             }
                         } catch (e: Exception) {
                             errorMessage = "Save failed: ${e.message}"

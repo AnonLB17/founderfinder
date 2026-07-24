@@ -206,8 +206,9 @@ fun PortfolioAndTermsScreen(navController: NavHostController) {
                                     .set(data, SetOptions.merge())
                                     .await()
 
+                                // Clear entire onboarding stack when investor flow is done
                                 navController.navigate(Screen.InvestorSearch.route) {
-                                    popUpTo(Screen.SelectUserType.route) { inclusive = true }
+                                    popUpTo(Screen.OnboardingGraph.route) { inclusive = true }
                                 }
                             } catch (e: Exception) {
                                 errorMessage = "Failed to save: ${e.message}"

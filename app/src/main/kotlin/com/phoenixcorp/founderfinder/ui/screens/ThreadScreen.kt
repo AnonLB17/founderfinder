@@ -33,6 +33,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.domain.model.Comment
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.CommentCard
 import com.phoenixcorp.founderfinder.ui.viewmodel.ThreadViewModel
 import kotlinx.coroutines.launch
@@ -58,6 +60,13 @@ fun ThreadScreen(
     val comments by viewModel.comments.collectAsState()
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
 
     var inputText by remember { mutableStateOf("") }
     var replyToId by remember { mutableStateOf<String?>(null) }
@@ -210,75 +219,96 @@ fun ThreadScreen(
                         onToggleReplies = { id, expand ->
                             expandedComments[id] = expand
                         },
-                        onReplyToComment = { id -> replyToId = id },
+                        onReplyToComment = { id ->
+                            if (!perms.requireComment(context)) return@CommentCard
+                            replyToId = id
+                        },
                         onFavorite = { commentId, isFavoriting ->
+                            if (!perms.requireEngage(context, "favorite")) return@CommentCard
                             viewModel.favoriteComment(commentId, isFavoriting)
                         },
-                        onLike = { commentId -> viewModel.likeComment(commentId) },
+                        onLike = { commentId ->
+                            if (!perms.requireEngage(context, "like")) return@CommentCard
+                            viewModel.likeComment(commentId)
+                        },
                         navController = navController
                     )
                 }
             }
 
-            // Input Field
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Row(
+            // Input Field — hidden for spectators
+            if (perms.canComment) {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    shape = RoundedCornerShape(24.dp)
                 ) {
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        label = {
-                            Text(if (replyToId != null) "Reply to comment..." else "Add a comment...")
-                        },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = {
-                            postComment(
-                                inputText = inputText,
-                                parentId = replyToId,
-                                threadViewModel = viewModel,
-                                auth = auth,
-                                firestore = FirebaseFirestore.getInstance(),
-                                category = category,
-                                forumId = forumId,
-                                threadId = threadId
-                            )
-                            inputText = ""
-                            replyToId = null
-                        }),
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            postComment(
-                                inputText = inputText,
-                                parentId = replyToId,
-                                threadViewModel = viewModel,
-                                auth = auth,
-                                firestore = FirebaseFirestore.getInstance(),
-                                category = category,
-                                forumId = forumId,
-                                threadId = threadId
-                            )
-                            inputText = ""   // Clear here
-                            replyToId = null
-                        },
-                        enabled = inputText.isNotBlank()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Send")
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            label = {
+                                Text(if (replyToId != null) "Reply to comment..." else "Add a comment...")
+                            },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = {
+                                if (!perms.requireComment(context)) return@KeyboardActions
+                                postComment(
+                                    inputText = inputText,
+                                    parentId = replyToId,
+                                    threadViewModel = viewModel,
+                                    auth = auth,
+                                    firestore = FirebaseFirestore.getInstance(),
+                                    category = category,
+                                    forumId = forumId,
+                                    threadId = threadId
+                                )
+                                inputText = ""
+                                replyToId = null
+                            }),
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                if (!perms.requireComment(context)) return@Button
+                                postComment(
+                                    inputText = inputText,
+                                    parentId = replyToId,
+                                    threadViewModel = viewModel,
+                                    auth = auth,
+                                    firestore = FirebaseFirestore.getInstance(),
+                                    category = category,
+                                    forumId = forumId,
+                                    threadId = threadId
+                                )
+                                inputText = ""
+                                replyToId = null
+                            },
+                            enabled = inputText.isNotBlank()
+                        ) {
+                            Text("Send")
+                        }
                     }
                 }
+            } else {
+                Text(
+                    text = "Spectators can view this thread but cannot comment.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

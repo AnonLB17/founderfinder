@@ -1,115 +1,137 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
+import com.phoenixcorp.founderfinder.navigation.OnboardingSteps
 import com.phoenixcorp.founderfinder.navigation.Screen
-import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
-import com.phoenixcorp.founderfinder.ui.viewmodel.UserInfoViewModel
+import com.phoenixcorp.founderfinder.ui.components.OnboardingScaffold
+import com.phoenixcorp.founderfinder.ui.viewmodel.OnboardingViewModel
 
 @Composable
 fun UserInfoScreen(
     navController: NavHostController,
-    userInfoViewModel: UserInfoViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()   // For getting current user
+    onboardingViewModel: OnboardingViewModel
 ) {
-    val firstName by userInfoViewModel.firstName.collectAsState()
-    val lastName by userInfoViewModel.lastName.collectAsState()
-    val birthDate by userInfoViewModel.birthDate.collectAsState()
-    val isLoading by userInfoViewModel.isLoading.collectAsState()
-    val errorMessage by userInfoViewModel.errorMessage.collectAsState()
+    val profile by onboardingViewModel.profile.collectAsState()
+    val isLoading by onboardingViewModel.isLoading.collectAsState()
+    val errorMessage by onboardingViewModel.errorMessage.collectAsState()
+    val isInitialized by onboardingViewModel.isInitialized.collectAsState()
+
+    var firstName by remember { mutableStateOf("") }
+    var lastName by remember { mutableStateOf("") }
+    var birthDate by remember { mutableStateOf("") }
+
+    // Re-seed when shared profile loads or user navigates back
+    LaunchedEffect(profile, isInitialized) {
+        if (isInitialized) {
+            firstName = profile.firstName.orEmpty()
+            lastName = profile.lastName.orEmpty()
+            birthDate = profile.birthDate.orEmpty()
+        }
+    }
 
     val context = LocalContext.current
-    val currentUser = authViewModel.getCurrentUser()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Tell us about yourself",
-            style = MaterialTheme.typography.headlineLarge
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        OutlinedTextField(
-            value = firstName,
-            onValueChange = { userInfoViewModel.updateFirstName(it) },
-            label = { Text("First Name") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = lastName,
-            onValueChange = { userInfoViewModel.updateLastName(it) },
-            label = { Text("Last Name") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = birthDate,
-            onValueChange = { userInfoViewModel.updateBirthDate(it) },
-            label = { Text("Birth Date (MM/DD/YYYY)") },
-            placeholder = { Text("05/15/1995") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        errorMessage?.let {
-            Text(text = it, color = MaterialTheme.colorScheme.error)
+    OnboardingScaffold(
+        navController = navController,
+        title = "About You",
+        showBack = true,
+        currentStep = 2,
+        totalSteps = OnboardingSteps.TOTAL_FOUNDER,
+        isLoading = isLoading && !isInitialized
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Tell us about yourself", style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(8.dp))
-        }
 
-        Button(
-            onClick = {
-                if (currentUser == null) {
-                    Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
+            OutlinedTextField(
+                value = firstName,
+                onValueChange = { firstName = it },
+                label = { Text("First Name") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = lastName,
+                onValueChange = { lastName = it },
+                label = { Text("Last Name") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = birthDate,
+                onValueChange = { birthDate = it },
+                label = { Text("Birth Date (MM/DD/YYYY)") },
+                placeholder = { Text("05/15/1995") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
 
-                userInfoViewModel.saveUserInfo(currentUser.uid) { success ->
-                    if (success) {
-                        navController.navigate(Screen.Education.route) {
-                            popUpTo(Screen.UserInfo.route) { inclusive = true }
+            errorMessage?.let {
+                Text(text = it, color = MaterialTheme.colorScheme.error)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    if (firstName.isBlank() || lastName.isBlank() || birthDate.isBlank()) {
+                        Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    onboardingViewModel.updateBasicInfo(firstName, lastName, birthDate)
+                    onboardingViewModel.saveDraft { success ->
+                        if (success) {
+                            // CRITICAL: no popUpTo(inclusive=true) — keeps back stack
+                            navController.navigate(Screen.Education.route)
+                        } else {
+                            Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            } else {
-                Text("Next")
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                else Text("Next")
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun UserInfoScreenPreview() {
-    UserInfoScreen(navController = rememberNavController())
 }

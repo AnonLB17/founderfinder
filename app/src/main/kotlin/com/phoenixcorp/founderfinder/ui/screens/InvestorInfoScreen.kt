@@ -49,9 +49,8 @@ fun InvestorInfoScreen(
         when (uiState) {
             is InvestorUiState.Success -> {
                 Toast.makeText(context, "Investor profile created successfully!", Toast.LENGTH_LONG).show()
-                navController.navigate(Screen.PortfolioAndTerms.route) {
-                    popUpTo(Screen.SelectUserType.route) { inclusive = true }
-                }
+                // Keep InvestorInfo on back stack so Back works
+                navController.navigate(Screen.PortfolioAndTerms.route)
             }
             is InvestorUiState.Error -> {
                 val error = (uiState as InvestorUiState.Error).message

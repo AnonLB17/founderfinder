@@ -1,120 +1,159 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
+import com.phoenixcorp.founderfinder.navigation.OnboardingSteps
 import com.phoenixcorp.founderfinder.navigation.Screen
-import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
-import com.phoenixcorp.founderfinder.ui.viewmodel.OrganizationsOfInterestViewModel
+import com.phoenixcorp.founderfinder.ui.components.EditableEntryList
+import com.phoenixcorp.founderfinder.ui.components.OnboardingScaffold
+import com.phoenixcorp.founderfinder.ui.viewmodel.OnboardingViewModel
 
 @Composable
 fun OrganizationsOfInterestScreen(
     navController: NavHostController,
-    organizationsViewModel: OrganizationsOfInterestViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    onboardingViewModel: OnboardingViewModel
 ) {
-    val keyword by organizationsViewModel.keyword.collectAsState()
-    val organizations by organizationsViewModel.organizations.collectAsState()
-    val isLoading by organizationsViewModel.isLoading.collectAsState()
-    val errorMessage by organizationsViewModel.errorMessage.collectAsState()
+    val profile by onboardingViewModel.profile.collectAsState()
+    val isLoading by onboardingViewModel.isLoading.collectAsState()
+    val errorMessage by onboardingViewModel.errorMessage.collectAsState()
+    val isInitialized by onboardingViewModel.isInitialized.collectAsState()
+
+    var keyword by remember { mutableStateOf("") }
+    var organizations by remember { mutableStateOf<List<String>>(emptyList()) }
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(profile, isInitialized) {
+        if (isInitialized) organizations = profile.organizationsOfInterest
+    }
 
     val context = LocalContext.current
-    val currentUser = authViewModel.getCurrentUser()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Organizations of Interest",
-            style = MaterialTheme.typography.headlineLarge
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        OutlinedTextField(
-            value = keyword,
-            onValueChange = { organizationsViewModel.updateKeyword(it) },
-            label = { Text("Search Organization") },
-            placeholder = { Text("e.g. Y Combinator, a16z, Google") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Button(
-            onClick = {
-                organizationsViewModel.addOrganization()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+    OnboardingScaffold(
+        navController = navController,
+        title = "Organizations of Interest",
+        showBack = true,
+        currentStep = 9,
+        totalSteps = OnboardingSteps.TOTAL_FOUNDER,
+        isLoading = isLoading && !isInitialized
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("+ Add")
-        }
+            Text("Organizations you care about", style = MaterialTheme.typography.headlineSmall)
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (organizations.isNotEmpty()) {
-            Text("Selected Organizations:", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            organizations.forEach { org ->
-                Text(text = "• $org", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-        } else {
-            Text(
-                text = "No organizations added yet.",
-                style = MaterialTheme.typography.bodySmall
+            OutlinedTextField(
+                value = keyword,
+                onValueChange = { keyword = it },
+                label = { Text("Search Organization") },
+                placeholder = { Text("e.g. Y Combinator, a16z, Google") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
             )
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        errorMessage?.let {
-            Text(text = it, color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Button(
-            onClick = {
-                if (currentUser == null) {
-                    Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                organizationsViewModel.saveOrganizations(currentUser.uid) { success ->
-                    if (success) {
-                        navController.navigate(Screen.PublicAppearance.route) {
-                            popUpTo(Screen.OrganizationsOfInterest.route) { inclusive = true }
+            OutlinedButton(
+                onClick = {
+                    val trimmed = keyword.trim()
+                    if (trimmed.isBlank()) {
+                        Toast.makeText(context, "Enter an organization", Toast.LENGTH_SHORT).show()
+                        return@OutlinedButton
+                    }
+                    organizations = if (editingIndex != null) {
+                        organizations.toMutableList().also { it[editingIndex!!] = trimmed }
+                    } else {
+                        if (trimmed in organizations) {
+                            Toast.makeText(context, "Already added", Toast.LENGTH_SHORT).show()
+                            return@OutlinedButton
                         }
+                        organizations + trimmed
+                    }
+                    keyword = ""
+                    editingIndex = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                Text(if (editingIndex != null) "Update Organization" else "+ Add")
+            }
+
+            if (editingIndex != null) {
+                OutlinedButton(
+                    onClick = { keyword = ""; editingIndex = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) { Text("Cancel Edit") }
+            }
+
+            EditableEntryList(
+                entries = organizations,
+                enabled = !isLoading,
+                emptyMessage = "No organizations added yet.",
+                onEdit = { index ->
+                    keyword = organizations[index]
+                    editingIndex = index
+                },
+                onRemove = { index ->
+                    organizations = organizations.toMutableList().also { it.removeAt(index) }
+                    if (editingIndex == index) {
+                        keyword = ""; editingIndex = null
+                    } else if (editingIndex != null && editingIndex!! > index) {
+                        editingIndex = editingIndex!! - 1
                     }
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            } else {
-                Text("Next")
+            )
+
+            errorMessage?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    onboardingViewModel.updateOrganizations(organizations)
+                    onboardingViewModel.saveDraft { success ->
+                        if (success) {
+                            navController.navigate(Screen.PublicAppearance.route)
+                        } else Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                else Text("Next")
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun OrganizationsOfInterestScreenPreview() {
-    OrganizationsOfInterestScreen(navController = rememberNavController())
 }

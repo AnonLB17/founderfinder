@@ -1,165 +1,217 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
+import com.phoenixcorp.founderfinder.navigation.OnboardingSteps
 import com.phoenixcorp.founderfinder.navigation.Screen
-import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
-import com.phoenixcorp.founderfinder.ui.viewmodel.FounderStatusViewModel
+import com.phoenixcorp.founderfinder.ui.components.EditableEntryList
+import com.phoenixcorp.founderfinder.ui.components.OnboardingScaffold
+import com.phoenixcorp.founderfinder.ui.viewmodel.OnboardingViewModel
 
 @Composable
 fun FounderStatusScreen(
     navController: NavHostController,
-    founderStatusViewModel: FounderStatusViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    onboardingViewModel: OnboardingViewModel
 ) {
-    val isFounder by founderStatusViewModel.isFounder.collectAsState()
-    val startupName by founderStatusViewModel.startupName.collectAsState()
-    val startupStage by founderStatusViewModel.startupStage.collectAsState()
-    val founderEntries by founderStatusViewModel.founderEntries.collectAsState()
-    val isLoading by founderStatusViewModel.isLoading.collectAsState()
-    val errorMessage by founderStatusViewModel.errorMessage.collectAsState()
+    val profile by onboardingViewModel.profile.collectAsState()
+    val isLoading by onboardingViewModel.isLoading.collectAsState()
+    val errorMessage by onboardingViewModel.errorMessage.collectAsState()
+    val isInitialized by onboardingViewModel.isInitialized.collectAsState()
+
+    var isFounder by remember { mutableStateOf(false) }
+    var startupName by remember { mutableStateOf("") }
+    var startupStage by remember { mutableStateOf("") }
+    var entries by remember { mutableStateOf<List<String>>(emptyList()) }
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(profile, isInitialized) {
+        if (isInitialized) {
+            isFounder = profile.isFounder || profile.founderEntries.isNotEmpty()
+            entries = profile.founderEntries
+        }
+    }
 
     val context = LocalContext.current
-    val currentUser = authViewModel.getCurrentUser()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Founder Status",
-            style = MaterialTheme.typography.headlineLarge
-        )
-        Spacer(modifier = Modifier.height(24.dp))
+    fun clearFields() {
+        startupName = ""; startupStage = ""; editingIndex = null
+    }
 
-        Text(text = "Are you currently a founder?")
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = isFounder,
-                    onClick = { founderStatusViewModel.setFounderStatus(true) },
-                    enabled = !isLoading
-                )
-                Text("Yes")
-            }
-            Spacer(modifier = Modifier.width(24.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = !isFounder,
-                    onClick = { founderStatusViewModel.setFounderStatus(false) },
-                    enabled = !isLoading
-                )
-                Text("No")
-            }
+    fun parseEntry(entry: String) {
+        // "{name} - {stage}"
+        val dash = entry.indexOf(" - ")
+        if (dash >= 0) {
+            startupName = entry.substring(0, dash)
+            startupStage = entry.substring(dash + 3)
+        } else {
+            startupName = entry
+            startupStage = ""
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (isFounder) {
-            OutlinedTextField(
-                value = startupName,
-                onValueChange = { founderStatusViewModel.updateStartupName(it) },
-                label = { Text("Startup Name") },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading,
-                singleLine = true
-            )
+    OnboardingScaffold(
+        navController = navController,
+        title = "Founder Status",
+        showBack = true,
+        currentStep = 5,
+        totalSteps = OnboardingSteps.TOTAL_FOUNDER,
+        isLoading = isLoading && !isInitialized
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Are you currently a founder?", style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(8.dp))
 
-            OutlinedTextField(
-                value = startupStage,
-                onValueChange = { founderStatusViewModel.updateStartupStage(it) },
-                label = { Text("Startup Stage (e.g. Pre-seed, Seed, Series A)") },
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading,
-                singleLine = true
-            )
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = isFounder,
+                        onClick = { isFounder = true },
+                        enabled = !isLoading
+                    )
+                    Text("Yes")
+                }
+                Spacer(modifier = Modifier.width(24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = !isFounder,
+                        onClick = {
+                            isFounder = false
+                            entries = emptyList()
+                            clearFields()
+                        },
+                        enabled = !isLoading
+                    )
+                    Text("No")
+                }
+            }
+
+            if (isFounder) {
+                OutlinedTextField(
+                    value = startupName,
+                    onValueChange = { startupName = it },
+                    label = { Text("Startup Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading,
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = startupStage,
+                    onValueChange = { startupStage = it },
+                    label = { Text("Startup Stage (e.g. Pre-seed, Seed, Series A)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading,
+                    singleLine = true
+                )
+                OutlinedButton(
+                    onClick = {
+                        if (startupName.isBlank() || startupStage.isBlank()) {
+                            Toast.makeText(context, "Name and stage required", Toast.LENGTH_SHORT).show()
+                            return@OutlinedButton
+                        }
+                        val formatted = "$startupName - $startupStage"
+                        entries = if (editingIndex != null) {
+                            entries.toMutableList().also { it[editingIndex!!] = formatted }
+                        } else entries + formatted
+                        clearFields()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) {
+                    Text(if (editingIndex != null) "Update Startup" else "+ Add Startup")
+                }
+
+                if (editingIndex != null) {
+                    OutlinedButton(
+                        onClick = { clearFields() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoading
+                    ) { Text("Cancel Edit") }
+                }
+
+                EditableEntryList(
+                    entries = entries,
+                    enabled = !isLoading,
+                    emptyMessage = "No founder entries yet.",
+                    onEdit = { index ->
+                        parseEntry(entries[index])
+                        editingIndex = index
+                    },
+                    onRemove = { index ->
+                        entries = entries.toMutableList().also { it.removeAt(index) }
+                        if (editingIndex == index) clearFields()
+                        else if (editingIndex != null && editingIndex!! > index) {
+                            editingIndex = editingIndex!! - 1
+                        }
+                    }
+                )
+            } else {
+                Text("No founder details required.", style = MaterialTheme.typography.bodyMedium)
+            }
+
+            errorMessage?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
                 onClick = {
-                    founderStatusViewModel.addFounderEntry()
+                    if (isFounder && entries.isEmpty()) {
+                        Toast.makeText(context, "Add at least one founder entry or select No", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    onboardingViewModel.updateFounderStatus(isFounder, if (isFounder) entries else emptyList())
+                    onboardingViewModel.saveDraft { success ->
+                        if (success) navController.navigate(Screen.AmbitionStatement.route)
+                        else Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading
             ) {
-                Text("+ Add Startup")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (founderEntries.isNotEmpty()) {
-                Text("Added Founder Entries:", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                founderEntries.forEach { entry ->
-                    Text(text = "• $entry", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-            } else {
-                Text(text = "No founder entries added yet.", style = MaterialTheme.typography.bodySmall)
-            }
-        } else {
-            Text(
-                text = "No founder details required.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        errorMessage?.let {
-            Text(text = it, color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Button(
-            onClick = {
-                if (currentUser == null) {
-                    Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                founderStatusViewModel.saveFounderStatus(currentUser.uid) { success ->
-                    if (success) {
-                        navController.navigate(Screen.AmbitionStatement.route) {
-                            popUpTo(Screen.FounderStatus.route) { inclusive = true }
-                        }
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            } else {
-                Text("Next")
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                else Text("Next")
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun FounderStatusScreenPreview() {
-    FounderStatusScreen(navController = rememberNavController())
 }

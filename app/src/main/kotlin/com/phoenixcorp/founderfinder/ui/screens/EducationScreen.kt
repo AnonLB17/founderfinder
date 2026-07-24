@@ -1,142 +1,196 @@
 package com.phoenixcorp.founderfinder.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
+import com.phoenixcorp.founderfinder.navigation.OnboardingSteps
 import com.phoenixcorp.founderfinder.navigation.Screen
-import com.phoenixcorp.founderfinder.ui.viewmodel.AuthViewModel
-import com.phoenixcorp.founderfinder.ui.viewmodel.EducationViewModel
+import com.phoenixcorp.founderfinder.ui.components.EditableEntryList
+import com.phoenixcorp.founderfinder.ui.components.OnboardingScaffold
+import com.phoenixcorp.founderfinder.ui.viewmodel.OnboardingViewModel
 
 @Composable
 fun EducationScreen(
     navController: NavHostController,
-    educationViewModel: EducationViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    onboardingViewModel: OnboardingViewModel
 ) {
-    val highestEducation by educationViewModel.highestEducation.collectAsState()
-    val areaOfStudy by educationViewModel.areaOfStudy.collectAsState()
-    val institution by educationViewModel.institution.collectAsState()
-    val educationEntries by educationViewModel.educationEntries.collectAsState()
-    val isLoading by educationViewModel.isLoading.collectAsState()
-    val errorMessage by educationViewModel.errorMessage.collectAsState()
+    val profile by onboardingViewModel.profile.collectAsState()
+    val isLoading by onboardingViewModel.isLoading.collectAsState()
+    val errorMessage by onboardingViewModel.errorMessage.collectAsState()
+    val isInitialized by onboardingViewModel.isInitialized.collectAsState()
+
+    var highestEducation by remember { mutableStateOf("") }
+    var areaOfStudy by remember { mutableStateOf("") }
+    var institution by remember { mutableStateOf("") }
+    var entries by remember { mutableStateOf<List<String>>(emptyList()) }
+    /** null = adding new; non-null = replacing entries[index] */
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(profile, isInitialized) {
+        if (isInitialized) entries = profile.educationEntries
+    }
 
     val context = LocalContext.current
-    val currentUser = authViewModel.getCurrentUser()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Education",
-            style = MaterialTheme.typography.headlineLarge
-        )
-        Spacer(modifier = Modifier.height(24.dp))
+    fun clearFields() {
+        highestEducation = ""
+        areaOfStudy = ""
+        institution = ""
+        editingIndex = null
+    }
 
-        OutlinedTextField(
-            value = highestEducation,
-            onValueChange = { educationViewModel.updateHighestEducation(it) },
-            label = { Text("Highest Level of Education") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = areaOfStudy,
-            onValueChange = { educationViewModel.updateAreaOfStudy(it) },
-            label = { Text("Area of Study / Major") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = institution,
-            onValueChange = { educationViewModel.updateInstitution(it) },
-            label = { Text("Institution Name") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                educationViewModel.addEducationEntry()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            Text("+ Add Education")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (educationEntries.isNotEmpty()) {
-            Text("Added Education Entries:", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            educationEntries.forEach { entry ->
-                Text(text = "• $entry", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(4.dp))
-            }
+    fun parseEducation(entry: String) {
+        // Format: "{degree} in {area} from {institution}"
+        val inIdx = entry.indexOf(" in ")
+        val fromIdx = entry.indexOf(" from ")
+        if (inIdx >= 0 && fromIdx > inIdx) {
+            highestEducation = entry.substring(0, inIdx)
+            areaOfStudy = entry.substring(inIdx + 4, fromIdx)
+            institution = entry.substring(fromIdx + 6)
         } else {
-            Text(
-                text = "No education entries added yet.",
-                style = MaterialTheme.typography.bodySmall
+            highestEducation = entry
+            areaOfStudy = ""
+            institution = ""
+        }
+    }
+
+    OnboardingScaffold(
+        navController = navController,
+        title = "Education",
+        showBack = true,
+        currentStep = 3,
+        totalSteps = OnboardingSteps.TOTAL_FOUNDER,
+        isLoading = isLoading && !isInitialized
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Add your education", style = MaterialTheme.typography.headlineSmall)
+
+            OutlinedTextField(
+                value = highestEducation,
+                onValueChange = { highestEducation = it },
+                label = { Text("Highest Education (e.g. Bachelor's)") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
             )
-        }
+            OutlinedTextField(
+                value = areaOfStudy,
+                onValueChange = { areaOfStudy = it },
+                label = { Text("Area of Study / Major") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = institution,
+                onValueChange = { institution = it },
+                label = { Text("Institution Name") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                singleLine = true
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = {
+                    if (highestEducation.isBlank() || areaOfStudy.isBlank() || institution.isBlank()) {
+                        Toast.makeText(context, "Fill all education fields first", Toast.LENGTH_SHORT).show()
+                        return@OutlinedButton
+                    }
+                    val formatted = "$highestEducation in $areaOfStudy from $institution"
+                    entries = if (editingIndex != null) {
+                        entries.toMutableList().also { it[editingIndex!!] = formatted }
+                    } else {
+                        entries + formatted
+                    }
+                    clearFields()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                Text(if (editingIndex != null) "Update Education" else "+ Add Education")
+            }
 
-        errorMessage?.let {
-            Text(text = it, color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
+            if (editingIndex != null) {
+                OutlinedButton(
+                    onClick = { clearFields() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) { Text("Cancel Edit") }
+            }
 
-        Button(
-            onClick = {
-                if (currentUser == null) {
-                    Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                educationViewModel.saveEducation(currentUser.uid) { success ->
-                    if (success) {
-                        navController.navigate(Screen.WorkExperience.route) {
-                            popUpTo(Screen.Education.route) { inclusive = true }
-                        }
+            EditableEntryList(
+                entries = entries,
+                enabled = !isLoading,
+                emptyMessage = "No education entries yet.",
+                onEdit = { index ->
+                    parseEducation(entries[index])
+                    editingIndex = index
+                },
+                onRemove = { index ->
+                    entries = entries.toMutableList().also { it.removeAt(index) }
+                    if (editingIndex == index) clearFields()
+                    else if (editingIndex != null && editingIndex!! > index) {
+                        editingIndex = editingIndex!! - 1
                     }
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            } else {
-                Text("Next")
+            )
+
+            errorMessage?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    if (entries.isEmpty()) {
+                        Toast.makeText(context, "Please add at least one education entry", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    onboardingViewModel.updateEducation(entries)
+                    onboardingViewModel.saveDraft { success ->
+                        if (success) navController.navigate(Screen.WorkExperience.route)
+                        else Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                else Text("Next")
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun EducationScreenPreview() {
-    EducationScreen(navController = rememberNavController())
 }

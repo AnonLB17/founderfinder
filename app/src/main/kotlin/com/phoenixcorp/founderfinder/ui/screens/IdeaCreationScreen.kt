@@ -29,6 +29,8 @@ import com.google.firebase.storage.FirebaseStorage
 import com.phoenixcorp.founderfinder.R
 import com.phoenixcorp.founderfinder.domain.model.Organization
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -37,6 +39,13 @@ import java.util.UUID
 @Composable
 fun IdeaCreationScreen(navController: NavHostController) {
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
     val firestore = FirebaseFirestore.getInstance()
     val storage = FirebaseStorage.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -168,6 +177,7 @@ fun IdeaCreationScreen(navController: NavHostController) {
                         modifier = Modifier
                             .size(50.dp)
                             .clickable {
+                                if (!perms.requireCreate(context, "create an organization")) return@clickable
                                 isCreatingOrganization = true
                                 selectedOrganization = null
                                 businessName = ""
@@ -216,7 +226,10 @@ fun IdeaCreationScreen(navController: NavHostController) {
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+                    Button(onClick = {
+                        if (!perms.requireCreate(context, "upload an image")) return@Button
+                        imagePickerLauncher.launch("image/*")
+                    }) {
                         Text("Pick Image")
                     }
 
@@ -237,51 +250,53 @@ fun IdeaCreationScreen(navController: NavHostController) {
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Button(onClick = {
-                        coroutineScope.launch {
-                            if (businessName.isBlank() || ideaDescription.isBlank()) {
-                                errorMessage = "Please fill all fields."
-                                return@launch
-                            }
-                            try {
-                                val currentUser = auth.currentUser ?: throw Exception("User not signed in")
-                                var imageUri: String? = selectedOrganization?.imageUri
-                                if (selectedImageUri != null && selectedImageUri != selectedOrganization?.imageUri) {
-                                    val storageRef = storage.reference.child("organization_images/${UUID.randomUUID()}.jpg")
-                                    storageRef.putFile(Uri.parse(selectedImageUri)).await()
-                                    imageUri = storageRef.downloadUrl.await().toString()
+                    Button(
+                        onClick = {
+                            if (!perms.requireCreate(context, "save an organization")) return@Button
+                            coroutineScope.launch {
+                                if (businessName.isBlank() || ideaDescription.isBlank()) {
+                                    errorMessage = "Please fill all fields."
+                                    return@launch
                                 }
-                                val orgData = Organization(
-                                    id = selectedOrganization?.id ?: UUID.randomUUID().toString(),
-                                    name = businessName,
-                                    description = ideaDescription,
-                                    imageUri = imageUri,
-                                    creatorId = currentUser.uid
-                                )
-                                firestore.collection("organizations")
-                                    .document(orgData.id)
-                                    .set(orgData)
-                                    .await()
-                                organizations = if (selectedOrganization == null) {
-                                    organizations + orgData
-                                } else {
-                                    organizations.map { if (it.id == orgData.id) orgData else it }
+                                try {
+                                    val currentUser = auth.currentUser ?: throw Exception("User not signed in")
+                                    var imageUri: String? = selectedOrganization?.imageUri
+                                    if (selectedImageUri != null && selectedImageUri != selectedOrganization?.imageUri) {
+                                        val storageRef = storage.reference.child("organization_images/${UUID.randomUUID()}.jpg")
+                                        storageRef.putFile(Uri.parse(selectedImageUri)).await()
+                                        imageUri = storageRef.downloadUrl.await().toString()
+                                    }
+                                    val orgData = Organization(
+                                        id = selectedOrganization?.id ?: UUID.randomUUID().toString(),
+                                        name = businessName,
+                                        description = ideaDescription,
+                                        imageUri = imageUri,
+                                        creatorId = currentUser.uid
+                                    )
+                                    firestore.collection("organizations")
+                                        .document(orgData.id)
+                                        .set(orgData)
+                                        .await()
+                                    organizations = if (selectedOrganization == null) {
+                                        organizations + orgData
+                                    } else {
+                                        organizations.map { if (it.id == orgData.id) orgData else it }
+                                    }
+                                    selectedOrganization = orgData
+                                    // Save selected orgId to SharedPreferences
+                                    context.getSharedPreferences("founderfinder", Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putString("selectedOrgId", orgData.id)
+                                        .apply()
+                                    isCreatingOrganization = false
+                                    errorMessage = null
+                                    Toast.makeText(context, "Organization saved successfully", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Log.e("IdeaCreationScreen", "Error saving organization: ${e.message}", e)
+                                    errorMessage = "Failed to save organization: ${e.message}"
                                 }
-                                selectedOrganization = orgData
-                                // Save selected orgId to SharedPreferences
-                                context.getSharedPreferences("founderfinder", Context.MODE_PRIVATE)
-                                    .edit()
-                                    .putString("selectedOrgId", orgData.id)
-                                    .apply()
-                                isCreatingOrganization = false
-                                errorMessage = null
-                                Toast.makeText(context, "Organization saved successfully", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Log.e("IdeaCreationScreen", "Error saving organization: ${e.message}", e)
-                                errorMessage = "Failed to save organization: ${e.message}"
                             }
-                        }
-                    }) {
+                        }) {
                         Text("Submit")
                     }
                 }

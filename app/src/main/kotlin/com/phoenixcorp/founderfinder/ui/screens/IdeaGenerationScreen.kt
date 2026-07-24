@@ -24,6 +24,8 @@ import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
 import com.phoenixcorp.founderfinder.ui.components.BottomNavigationBar
 import com.phoenixcorp.founderfinder.ui.components.ForumCard
 import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -46,6 +48,13 @@ fun IdeaGenerationScreen(
     category: String? = null
 ) {
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
     val coroutineScope = rememberCoroutineScope()
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -201,13 +210,14 @@ fun IdeaGenerationScreen(
                 title = { Text("Idea Generation") },
                 subtitle = buttonText,
                 navController = navController,
-                showAddButton = showAddButton && selectedGlobe != null,
+                showAddButton = showAddButton && selectedGlobe != null && perms.canCreate,
                 categoryButtonText = buttonText,
                 onCategoryButtonClick = {
                     Log.d("IdeaGenerationScreen", "Opening location selection dialog")
                     showLocationDialog = true
                 },
                 onAddClick = {
+                    if (!perms.requireCreate(context, "create a forum")) return@ScreenBanner
                     Log.d("IdeaGenerationScreen", "Navigating to ForumCreationScreen with category=$selectedCategoryName, location=${selectedProvinceData ?: selectedNationData ?: selectedGlobeData}")
                     navController.navigate(
                         Screen.ForumCreation.createRoute(

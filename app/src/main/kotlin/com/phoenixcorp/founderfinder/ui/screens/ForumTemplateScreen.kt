@@ -20,6 +20,8 @@ import androidx.navigation.NavHostController
 import com.phoenixcorp.founderfinder.domain.model.Forum
 import com.phoenixcorp.founderfinder.domain.model.Thread
 import com.phoenixcorp.founderfinder.ui.components.ScreenBanner
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
 import com.phoenixcorp.founderfinder.ui.components.ThreadCard
 import com.phoenixcorp.founderfinder.ui.viewmodel.ForumViewModel
 
@@ -32,6 +34,13 @@ fun ForumTemplateScreen(
     viewModel: ForumViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
 
     // Parse from route (no hardcoding)
     val parts = institutionName.split("/")
@@ -104,30 +113,48 @@ fun ForumTemplateScreen(
                             ThreadCard(
                                 thread = thread,
                                 navController = navController,
-                                onFavorite = { _, _ -> },
-                                onLike = { }
+                                onFavorite = { _, _ ->
+                                    if (!perms.requireEngage(context, "favorite")) return@ThreadCard
+                                },
+                                onLike = {
+                                    if (!perms.requireEngage(context, "like")) return@ThreadCard
+                                }
                             )
                         }
                     }
                 }
 
-                NewThreadInput(
-                    text = inputText,
-                    onTextChange = { inputText = it },
-                    onPost = {
-                        if (inputText.isNotBlank() && forum != null) {
-                            viewModel.createThread(
-                                message = inputText,
-                                forumId = forumId,
-                                routeCategory = category,           // Pass the parsed category
-                                forumOwnerId = forum?.creatorId.orEmpty()
-                            )
-                            inputText = ""
-                        } else {
-                            Toast.makeText(context, "Please enter a message", Toast.LENGTH_SHORT).show()
+                // Spectators can read threads but not post new ones
+                if (perms.canCreate) {
+                    NewThreadInput(
+                        text = inputText,
+                        onTextChange = { inputText = it },
+                        onPost = {
+                            if (!perms.requireCreate(context, "start a thread")) return@NewThreadInput
+                            if (inputText.isNotBlank() && forum != null) {
+                                viewModel.createThread(
+                                    message = inputText,
+                                    forumId = forumId,
+                                    routeCategory = category,
+                                    forumOwnerId = forum?.creatorId.orEmpty()
+                                )
+                                inputText = ""
+                            } else {
+                                Toast.makeText(context, "Please enter a message", Toast.LENGTH_SHORT).show()
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    Text(
+                        text = "Spectators can view this forum but cannot post.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }

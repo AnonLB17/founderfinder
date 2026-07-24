@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -82,6 +83,9 @@ fun PartnersScreen(
     var activityListener: ListenerRegistration? by remember { mutableStateOf(null) }
     var orgActivityListeners by remember { mutableStateOf<Map<String, ListenerRegistration>>(emptyMap()) }
     var lastNavigatedOrgId by remember { mutableStateOf<String?>(null) }
+    var showRemovePartnerDialog by remember { mutableStateOf(false) }
+    var removeTargetPartnerId by remember { mutableStateOf<String?>(null) }
+    var removeTargetOrgId by remember { mutableStateOf<String?>(null) }
 
     // Time slots
     val timeSlots = listOf(
@@ -121,53 +125,65 @@ fun PartnersScreen(
 
 
 
-            // Fetch invited organizations
-            val invitationSnapshot = firestore.collection("invitations")
-                .whereEqualTo("inviteeId", currentUser.uid)
-                .get()
-                .await()
-            val invitedOrgIds = invitationSnapshot.documents.mapNotNull { doc ->
-                doc.getString("orgId")
-            }.distinct()
+            // ── Membership: ONLY creator OR partners/{uid} OR collaborators/{uid} ──
+            // Invitations alone do NOT grant a row on Partners (avoids ghost orgs after remove).
+            val membershipOrgIds = mutableSetOf<String>()
 
-            // Fetch organizations where user is a collaborator
-            val collaboratorOrgIds = mutableListOf<String>()
-            val orgSnapshot = firestore.collection("organizations").get().await()
-            for (orgDoc in orgSnapshot.documents) {
-                val orgId = orgDoc.id
-                val collaboratorDoc = firestore.collection("organizations")
-                    .document(orgId)
-                    .collection("collaborators")
-                    .document(currentUser.uid)
-                    .get()
-                    .await()
-                if (collaboratorDoc.exists()) {
-                    collaboratorOrgIds.add(orgId)
+            try {
+                val orgSnapshot = firestore.collection("organizations").get().await()
+                for (orgDoc in orgSnapshot.documents) {
+                    val orgId = orgDoc.id
+                    try {
+                        val partnerDoc = firestore.collection("organizations")
+                            .document(orgId)
+                            .collection("partners")
+                            .document(currentUser.uid)
+                            .get()
+                            .await()
+                        if (partnerDoc.exists()) {
+                            membershipOrgIds.add(orgId)
+                            continue
+                        }
+                    } catch (e: Exception) {
+                        Log.w("PartnersScreen", "partners read $orgId: ${e.message}")
+                    }
+                    try {
+                        val collabDoc = firestore.collection("organizations")
+                            .document(orgId)
+                            .collection("collaborators")
+                            .document(currentUser.uid)
+                            .get()
+                            .await()
+                        if (collabDoc.exists()) {
+                            membershipOrgIds.add(orgId)
+                        }
+                    } catch (e: Exception) {
+                        Log.w("PartnersScreen", "collaborators read $orgId: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("PartnersScreen", "organizations list failed: ${e.message}")
+            }
+
+            Log.d("PartnersScreen", "Membership orgIds (partners/collabs only): $membershipOrgIds")
+
+            val memberOrgs = membershipOrgIds.mapNotNull { orgId ->
+                try {
+                    val doc = firestore.collection("organizations").document(orgId).get().await()
+                    if (!doc.exists()) null
+                    else doc.toObject(Organization::class.java)?.copy(id = doc.id)
+                } catch (e: Exception) {
+                    Log.e("PartnersScreen", "Error loading org $orgId: ${e.message}")
+                    null
                 }
             }
-            val allInvitedOrgIds = (invitedOrgIds + collaboratorOrgIds).distinct()
-            Log.d("PartnersScreen", "Fetched ${allInvitedOrgIds.size} invited orgIds: $allInvitedOrgIds")
 
-            val invitedOrgs = if (allInvitedOrgIds.isNotEmpty()) {
-                firestore.collection("organizations")
-                    .whereIn("orgId", allInvitedOrgIds.take(10))
-                    .get()
-                    .await()
-                    .documents.mapNotNull { doc ->
-                        try {
-                            doc.toObject(Organization::class.java)?.copy(id = doc.id)
-                        } catch (e: Exception) {
-                            Log.e("PartnersScreen", "Error parsing invited organization ${doc.id}: ${e.message}")
-                            null
-                        }
-                    }
-            } else {
-                emptyList()
-            }
-
-            // Merge organizations
-            organizations = (createdOrgs + invitedOrgs).distinctBy { it.id }
-            Log.d("PartnersScreen", "Total fetched ${organizations.size} organizations")
+            // createdOrgs already fetched above (creatorId == current user)
+            organizations = (createdOrgs + memberOrgs).distinctBy { it.id }
+            Log.d(
+                "PartnersScreen",
+                "Total orgs=${organizations.size} created=${createdOrgs.size} member=${memberOrgs.size}"
+            )
 
             // Fetch partners for each organization
             val partnersMap = mutableMapOf<String, List<String>>()
@@ -194,6 +210,7 @@ fun PartnersScreen(
                 }
             }
             partnersByOrg = partnersMap
+            errorMessage = null  // orgs loaded; ignore prior non-fatal listener noise
             Log.d("PartnersScreen", "Fetched partners: $partnersMap")
 
             // Fetch user profiles
@@ -265,8 +282,7 @@ fun PartnersScreen(
             .whereEqualTo("creatorId", currentUser.uid)
             .addSnapshotListener { userSnapshot, userError ->
                 if (userError != null) {
-                    Log.e("PartnersScreen", "User activity listener error: ${userError.message}", userError)
-                    errorMessage = "Failed to load user activities: ${userError.message}"
+                    Log.w("PartnersScreen", "User activity listener error: ${userError.message}")
                     return@addSnapshotListener
                 }
                 if (userSnapshot == null) {
@@ -294,8 +310,8 @@ fun PartnersScreen(
                 .collection("activities")
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Log.e("PartnersScreen", "Org activity listener error for $orgId: ${error.message}", error)
-                        errorMessage = "Failed to load org activities: ${error.message}"
+                        // Permission denied for non-member orgs must not blank the whole screen
+                        Log.w("PartnersScreen", "Org activity listener skipped for $orgId: ${error.message}")
                         return@addSnapshotListener
                     }
                     if (snapshot == null) {
@@ -352,7 +368,17 @@ fun PartnersScreen(
     }
 
     Scaffold(
-        topBar = { ScreenBanner(title = { Text("Partners") }, navController = navController, showBackButton = true) },
+        topBar = {
+            ScreenBanner(
+                title = { Text("Partners") },
+                navController = navController,
+                showBackButton = true,
+                showMailButton = true,
+                onMailClick = {
+                    navController.navigate(Screen.PrivateMessages.route)
+                }
+            )
+        },
         bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         Column(
@@ -414,10 +440,11 @@ fun PartnersScreen(
                                     )
                                 } ?: painterResource(id = R.drawable.ic_placeholder),
                                 contentDescription = "Organization",
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(80.dp)
+                                    .padding(end = 8.dp)
+                                    .size(72.dp)
                                     .clip(CircleShape)
-                                    .padding(8.dp)
                                     .pointerInput(org.id) {
                                         detectTapGestures(
                                             onTap = {
@@ -458,10 +485,11 @@ fun PartnersScreen(
                                         )
                                     } ?: painterResource(id = R.drawable.ic_profile_placeholder),
                                     contentDescription = "Partner Profile",
+                                    contentScale = ContentScale.Crop,
                                     modifier = Modifier
-                                        .size(60.dp)
+                                        .padding(end = 6.dp)
+                                        .size(56.dp)
                                         .clip(CircleShape)
-                                        .padding(8.dp)
                                         .pointerInput(partnerId) {
                                             detectTapGestures(
                                                 onTap = {
@@ -472,7 +500,7 @@ fun PartnersScreen(
                                                 onLongPress = {
                                                     selectedPartnerId = partnerId
                                                     selectedOrgId = null
-                                                    Log.d("PartnersScreen", "Long pressed partner: $partnerId, navigating to private chat")
+                                                    Log.d("PartnersScreen", "Long pressed partner: $partnerId → private chat")
                                                     val conversationId = if (currentUser?.uid != null && currentUser.uid < partnerId) {
                                                         "${currentUser.uid}_$partnerId"
                                                     } else {
@@ -766,6 +794,7 @@ fun PartnersScreen(
         }
     }
 
+
     DisposableEffect(Unit) {
         onDispose {
             activityListener?.remove()
@@ -908,6 +937,42 @@ private fun createActivityReminders(
         }
     }
 }
+
+
+/**
+ * Creator-only: remove a user from partners and collaborators under the org,
+ * and mark related invitations denied.
+ */
+private suspend fun removePartnerFromOrganization(
+    firestore: FirebaseFirestore,
+    orgId: String,
+    partnerId: String
+) {
+    val orgRef = firestore.collection("organizations").document(orgId)
+    orgRef.collection("partners").document(partnerId).delete().await()
+    orgRef.collection("collaborators").document(partnerId).delete().await()
+    try {
+        orgRef.collection("invitations").document(partnerId)
+            .set(mapOf("status" to "removed"), com.google.firebase.firestore.SetOptions.merge())
+            .await()
+    } catch (e: Exception) {
+        Log.w("PartnersScreen", "Org invitation update skipped: ${e.message}")
+    }
+    try {
+        val invites = firestore.collection("invitations")
+            .whereEqualTo("inviteeId", partnerId)
+            .whereEqualTo("orgId", orgId)
+            .get()
+            .await()
+        invites.documents.forEach { doc ->
+            try { doc.reference.update("status", "removed").await() }
+            catch (e: Exception) { Log.w("PartnersScreen", "Invite update skipped: ${e.message}") }
+        }
+    } catch (e: Exception) {
+        Log.w("PartnersScreen", "Top-level invitations query skipped: ${e.message}")
+    }
+}
+
 
 private fun getTimeInMillis(timeSlot: String): Long {
     val parts = timeSlot.split(":")
