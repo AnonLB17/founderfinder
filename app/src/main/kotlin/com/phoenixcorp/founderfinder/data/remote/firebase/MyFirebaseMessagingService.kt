@@ -1,0 +1,121 @@
+package com.phoenixcorp.founderfinder.data.remote.firebase
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Build
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import com.phoenixcorp.founderfinder.MainActivity
+import com.phoenixcorp.founderfinder.R
+
+class MyFirebaseMessagingService : FirebaseMessagingService() {
+
+    private val TAG = "FCM_Service"
+
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        super.onMessageReceived(remoteMessage)
+        Log.d(TAG, "📩 FCM Received from: ${remoteMessage.from}")
+        Log.d(TAG, "Data: ${remoteMessage.data}")
+        Log.d(TAG, "Notification: ${remoteMessage.notification}")
+
+        val data = remoteMessage.data
+
+        val title = data["title"] ?: remoteMessage.notification?.title ?: "FounderFinder"
+        val body = data["body"] ?: remoteMessage.notification?.body ?: "New update"
+
+        val screen = data["screen"] ?: data["type"] ?: ""
+        val chatId = data["chatId"]
+        val forumId = data["forumId"]
+        val threadId = data["threadId"]
+        val activityId = data["activityId"]
+
+        sendNotification(title, body, screen, chatId, forumId, threadId, activityId)
+    }
+
+    private fun sendNotification(
+        title: String,
+        body: String,
+        screen: String,
+        chatId: String?,
+        forumId: String?,
+        threadId: String?,
+        activityId: String?
+    ) {
+        val channelId = "founderfinder_notifications"
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "FounderFinder Notifications",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                enableVibration(true)
+                setShowBadge(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("screen", screen)
+            putExtra("type", screen)
+            chatId?.let { putExtra("chatId", it) }
+            forumId?.let { putExtra("forumId", it) }
+            threadId?.let { putExtra("threadId", it) }
+            activityId?.let { putExtra("activityId", it) }
+        }
+
+        val requestCode = (activityId ?: threadId ?: chatId ?: "default").hashCode()
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ff_logo)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        notificationManager.notify(requestCode, notification)
+        Log.d(TAG, "🔔 Notification shown: $title")
+    }
+
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        Log.d(TAG, "🔑 New FCM Token: $token")
+
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            Log.w(TAG, "No user logged in — token will be uploaded on next login")
+            return
+        }
+
+        val data = mapOf(
+            "fcmToken" to token,
+            "fcmTokenUpdatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+        )
+
+        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            .collection("profiles")
+            .document(uid)
+            .set(data, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d(TAG, "✅ FCM token saved for user $uid")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Failed to save FCM token", e)
+            }
+    }
+}

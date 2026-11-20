@@ -1,0 +1,367 @@
+package com.phoenixcorp.founderfinder.ui.screens
+
+import android.util.Log
+import android.widget.Toast
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
+import coil.compose.rememberAsyncImagePainter
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.phoenixcorp.founderfinder.R
+import com.phoenixcorp.founderfinder.domain.model.Comment
+import com.phoenixcorp.founderfinder.navigation.Screen
+import com.phoenixcorp.founderfinder.ui.utils.fetchCurrentUserRole
+import com.phoenixcorp.founderfinder.ui.utils.permissionsFor
+import com.phoenixcorp.founderfinder.ui.components.CommentCard
+import com.phoenixcorp.founderfinder.ui.viewmodel.ThreadViewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.google.firebase.firestore.ktx.toObject
+import com.phoenixcorp.founderfinder.domain.model.UserProfile
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ThreadScreen(
+    threadId: String,
+    forumId: String,
+    category: String = "requestedsolutions",  // Default fallback
+    navController: NavHostController
+) {
+    val viewModel: ThreadViewModel = hiltViewModel()
+    val thread by viewModel.thread.collectAsState()
+    val comments by viewModel.comments.collectAsState()
+    val context = LocalContext.current
+    val auth = FirebaseAuth.getInstance()
+
+    // Spectator permissions
+    var role by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        role = fetchCurrentUserRole()
+    }
+    val perms = remember(role) { permissionsFor(role) }
+
+    var inputText by remember { mutableStateOf("") }
+    var replyToId by remember { mutableStateOf<String?>(null) }
+
+    val expandedComments = remember { mutableStateMapOf<String, Boolean>() }
+
+    // Load thread using the passed category
+    LaunchedEffect(category, forumId, threadId) {
+        if (forumId.isNotBlank() && threadId.isNotBlank()) {
+            val finalCategory = category.ifBlank { "requestedsolutions" }
+            Log.d("ThreadScreen", "Loading thread with category: $finalCategory, forumId: $forumId, threadId: $threadId")
+            viewModel.loadThread(finalCategory, forumId, threadId)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Thread") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // === PINNED ORIGINAL THREAD ===
+            thread?.let { t ->
+                var displayName by remember { mutableStateOf(t.creatorName ?: "User") }
+                var displayProfilePic by remember { mutableStateOf<String?>(null) }
+
+                // Fetch full profile for pinned thread
+                LaunchedEffect(t.creatorId) {
+                    if (t.creatorId.isNotEmpty()) {
+                        try {
+                            Log.d("ThreadScreen", "Fetching profile for pinned thread creator: ${t.creatorId}")
+                            val firestore = FirebaseFirestore.getInstance()
+                            val profileDoc = firestore.collection("profiles")
+                                .document(t.creatorId)
+                                .get()
+                                .await()
+
+                            if (profileDoc.exists()) {
+                                val firstName = profileDoc.getString("firstName") ?: ""
+                                val lastName = profileDoc.getString("lastName") ?: ""
+                                val fullName = "$firstName $lastName".trim()
+
+                                if (fullName.isNotBlank()) {
+                                    displayName = fullName
+                                }
+
+                                displayProfilePic = profileDoc.getString("profilePicture")
+                                Log.d("ThreadScreen", "Pinned thread profile loaded: $displayName | pic=${displayProfilePic != null}")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ThreadScreen", "Failed to load pinned thread creator profile", e)
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(0.dp)
+                        .clickable { replyToId = null },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Original Post",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = displayProfilePic?.let { rememberAsyncImagePainter(it) }
+                                    ?: painterResource(id = R.drawable.ic_profile_placeholder),
+                                contentDescription = "Creator",
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .clickable { navController.navigate(Screen.UserProfile.createRoute(t.creatorId)) },
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = displayName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable { navController.navigate(Screen.UserProfile.createRoute(t.creatorId)) }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Text(
+                            text = t.message.ifBlank { "No message" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
+            } ?: Text("Loading thread...", modifier = Modifier.padding(16.dp))
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "Conversation (${comments.size})",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            // === SORTED COMMENTS: Favorited First ===
+            val sortedComments = remember(comments) {
+                comments.sortedWith(
+                    compareByDescending<Comment> { it.isActuallyFavorited }
+                        .thenByDescending { it.timestamp }
+                        .thenByDescending { it.likes ?: 0 }
+                )
+            }
+
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(
+                    items = sortedComments.filter { it.parentId == null },
+                    key = { "${it.id}_${it.isFavorited}_${it.likes}" }   // ← This forces refresh
+                ) { rootComment ->
+                    CommentCard(
+                        comment = rootComment,
+                        depth = 0,
+                        showReplies = expandedComments[rootComment.id] ?: false,
+                        showRepliesMap = expandedComments,
+                        comments = comments,
+                        onCommentClick = { },
+                        onToggleReplies = { id, expand ->
+                            expandedComments[id] = expand
+                        },
+                        onReplyToComment = { id ->
+                            if (!perms.requireComment(context)) return@CommentCard
+                            replyToId = id
+                        },
+                        onFavorite = { commentId, isFavoriting ->
+                            if (!perms.requireEngage(context, "favorite")) return@CommentCard
+                            viewModel.favoriteComment(commentId, isFavoriting)
+                        },
+                        onLike = { commentId ->
+                            if (!perms.requireEngage(context, "like")) return@CommentCard
+                            viewModel.likeComment(commentId)
+                        },
+                        navController = navController
+                    )
+                }
+            }
+
+            // Input Field — hidden for spectators
+            if (perms.canComment) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            label = {
+                                Text(if (replyToId != null) "Reply to comment..." else "Add a comment...")
+                            },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = {
+                                if (!perms.requireComment(context)) return@KeyboardActions
+                                postComment(
+                                    inputText = inputText,
+                                    parentId = replyToId,
+                                    threadViewModel = viewModel,
+                                    auth = auth,
+                                    firestore = FirebaseFirestore.getInstance(),
+                                    category = category,
+                                    forumId = forumId,
+                                    threadId = threadId
+                                )
+                                inputText = ""
+                                replyToId = null
+                            }),
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                if (!perms.requireComment(context)) return@Button
+                                postComment(
+                                    inputText = inputText,
+                                    parentId = replyToId,
+                                    threadViewModel = viewModel,
+                                    auth = auth,
+                                    firestore = FirebaseFirestore.getInstance(),
+                                    category = category,
+                                    forumId = forumId,
+                                    threadId = threadId
+                                )
+                                inputText = ""
+                                replyToId = null
+                            },
+                            enabled = inputText.isNotBlank()
+                        ) {
+                            Text("Send")
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "Spectators can view this thread but cannot comment.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+// postComment function
+private fun postComment(
+    inputText: String,
+    parentId: String? = null,
+    threadViewModel: ThreadViewModel,
+    auth: FirebaseAuth,
+    firestore: FirebaseFirestore,
+    category: String,           // From route
+    forumId: String,
+    threadId: String
+) {
+    val currentUser = auth.currentUser ?: return
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val profileDoc = firestore.collection("profiles")
+                .document(currentUser.uid)
+                .get()
+                .await()
+
+            val profile = profileDoc.toObject(UserProfile::class.java)
+            val realName = "${profile?.firstName ?: ""} ${profile?.lastName ?: ""}".trim()
+                .ifBlank { currentUser.displayName ?: "User" }
+
+            val profilePicture = profile?.profilePicture ?: currentUser.photoUrl?.toString() ?: ""
+
+            val newComment = Comment(
+                id = UUID.randomUUID().toString(),
+                creatorId = currentUser.uid,
+                creatorName = realName,
+                creatorProfilePicture = profilePicture,
+                message = inputText,
+                timestamp = System.currentTimeMillis(),
+                threadId = threadId,
+                forumId = forumId,
+                category = category,                    // Use passed category
+                parentId = parentId,
+                depth = if (parentId == null) 0 else 1   // 0 = top level, 1+ = reply
+            )
+
+            val isReply = parentId != null && parentId != "none"
+
+            threadViewModel.createComment(newComment)
+
+            Log.d("postComment", "Comment created - isReply=$isReply, category=$category")
+
+        } catch (e: Exception) {
+            Log.e("postComment", "Error creating comment", e)
+        }
+    }
+}
